@@ -19,12 +19,11 @@ type LogSettings struct {
 	Directory 	string `yaml:"directory"`
 }
 
-func Init(filename string, genConfigFile bool) *Config {
+func Init(filename string, genConfigFile bool) Config {
 
 	var cnf Config
 
 	if genConfigFile {
-
 		cnf := setDefault()
 
 		bytes, err := yaml.Marshal(cnf)
@@ -41,7 +40,6 @@ func Init(filename string, genConfigFile bool) *Config {
 		return cnf
 
 	} else {
-
 		file, err := os.ReadFile(filename)
 		if err != nil {
 			fmt.Println("Error load config file err: ", err)
@@ -55,13 +53,12 @@ func Init(filename string, genConfigFile bool) *Config {
 
 	}
 	
-
-	return &cnf
+	return cnf
 
 }
 
-func setDefault() *Config {	
-	return &Config {
+func setDefault() Config {	
+	return Config {
 		LogSettings: LogSettings {
 			Level: "error",
 			Directory: "logs",
