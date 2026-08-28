@@ -16,7 +16,7 @@ type Limiter struct {
 	rate		float64
 }
 
-func New(capacity float64, rate float64) *Limiter {
+func NewLimiter(capacity float64, rate float64) *Limiter {
 	return &Limiter {
 		lastTime: time.Now(),
 		capacity: capacity,
