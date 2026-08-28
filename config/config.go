@@ -12,6 +12,7 @@ import (
 type Config struct {
 	LogSettings 	LogSettings `yaml:"log_settings"`
 	StoreCacheInRam bool 		`yaml:"store_cache_in_ram"`
+	Hosts 			[]string 	`yaml:"hosts"`
 }
 
 type LogSettings struct {
@@ -64,6 +65,7 @@ func setDefault() Config {
 			Directory: "logs",
 		},
 		StoreCacheInRam: true,
+		Hosts: make([]string, 0),
 	}
 
 }

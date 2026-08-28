@@ -6,3 +6,11 @@ type StartSettings struct {
 	ConfigName string
 	GenConfigFile bool
 }
+
+type InboxRequest struct {
+	Method 	string
+	IP 		string
+	Port 	string
+	Host 	string
+	Path 	string
+}
