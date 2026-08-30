@@ -43,35 +43,17 @@ func (sl *ShardLimiter) Allow(ip string) bool {
 	idx := sl.getShardIndexFromIp(ip)
 	shard := &sl.shards[idx]
 
-	lim := shard.getLimiter(ip)
-	if lim == nil {
-		shard.addLimiter(ip, sl.limCapasity, sl.limRate)
-		return true
+	shard.rm.Lock()
+	defer shard.rm.Unlock()
+
+	lim, ok := shard.data[ip]
+
+	if !ok {
+		lim = NewLimiter(sl.limCapasity, sl.limRate)
+		shard.data[ip] = lim
 	}
 
 	return lim.Allow()
-}
-
-func (sh *Shard) getLimiter(ip string) *Limiter {
-	sh.rm.RLock()
-	defer sh.rm.Unlock()
-
-	val, ok := sh.data[ip]
-	if !ok {
-		return nil
-	}
-
-	return val
-}
-
-func (sh *Shard) addLimiter(ip string, capasity, rate float64) {
-
-	sh.rm.Lock()
-	defer sh.rm.Unlock()
-
-	newlim := NewLimiter(capasity, rate)
-	sh.data[ip] = newlim
-
 }
 
 func (sh *Shard) delLimiter(ip string) {

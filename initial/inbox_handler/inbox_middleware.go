@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/domain"
+	inboxhandler "mini_http_caching_proxy/initial/inbox_handler"
 	"mini_http_caching_proxy/rate"
 	"net"
 	"net/http"
@@ -13,12 +14,14 @@ import (
 type Middleware struct {
 	cnf 			*config.Config
 	generalLimiter 	*rate.Limiter
+	shardLimiter 	*rate.ShardLimiter
 }
 
-func NewMiddleware(cnf *config.Config, gl *rate.Limiter) *Middleware {
+func NewMiddleware(cnf *config.Config, gl *rate.Limiter, sh *rate.ShardLimiter) *Middleware {
 	return &Middleware {
 		cnf: cnf,
 		generalLimiter: gl,
+		shardLimiter: sh,
 	} 
 }
 
@@ -38,7 +41,7 @@ func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 		if intHost {
 			checkRL = mi.generalLimiter.Allow()
 		} else {
-			// TODO chech rate limited in shard map 
+			checkRL = mi.shardLimiter.Allow(inboxRequest.IP)
 		}
 
 		if !checkRL {
