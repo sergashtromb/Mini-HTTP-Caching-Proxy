@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/domain"
-	inboxhandler "mini_http_caching_proxy/initial/inbox_handler"
 	"mini_http_caching_proxy/rate"
 	"net"
 	"net/http"

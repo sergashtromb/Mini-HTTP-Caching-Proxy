@@ -3,8 +3,9 @@
 package inboxhandler
 
 import (
-	"net/http"
 	"mini_http_caching_proxy/config"
+	"net/http"
+	"slices"
 )
 
 type InboxHandler struct {
@@ -21,6 +22,20 @@ func NewInboxHandler() *InboxHandler {
 
 func (ih *InboxHandler) HandleInboxReq(w http.ResponseWriter, r *http.Request) {
 
+	isOurHost := slices.Contains(ih.cnf.Hosts, r.Host)
 
+	if isOurHost {
+		ih.workOurHostRequest(w, r)
+	} else {
+		ih.workOtherRequest(w, r)
+	}
 
+}
+
+func (ih *InboxHandler) workOtherRequest(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Request) {
+	
 }

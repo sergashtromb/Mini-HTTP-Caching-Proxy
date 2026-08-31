@@ -11,19 +11,18 @@ import (
 
 func main() {
 
-	workers := 100
-	rpc := 1000
+	workers := 10000
+	rpc := 10000
 	var qt_allowed int64
 	var qt_denided int64
 	var qt_total int64
 	stopChanel := make(chan struct{})
 	startTime := time.Now()
-
-	shardLimiter := rate.NewShardLimiter(16, 10, 1, 5)
+	shardLimiter := rate.NewShardLimiter(2, 100, 10, 5)
 
 	var wg sync.WaitGroup
 
-	timer := 30 * time.Second
+	timer := 50 * time.Second
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)

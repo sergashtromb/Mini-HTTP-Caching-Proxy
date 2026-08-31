@@ -10,14 +10,28 @@ import (
 )
 
 type Config struct {
-	LogSettings 	LogSettings `yaml:"log_settings"`
-	StoreCacheInRam bool 		`yaml:"store_cache_in_ram"`
-	Hosts 			[]string 	`yaml:"hosts"`
+	LogSettings 	LogSettings 		`yaml:"log_settings"`
+	ShLimiter 		ShardLimiterConfig 	`yaml:"shard_limiter"`
+	GlLimiter 		GlobalLimiterConfig `yaml:"global_limiter"`
+	StoreCacheInRam bool 				`yaml:"store_cache_in_ram"`
+	Hosts 			[]string 			`yaml:"hosts"`
 }
 
 type LogSettings struct {
 	Level 		string `yaml:"level"`
 	Directory 	string `yaml:"directory"`
+}
+
+type ShardLimiterConfig struct {
+	Rate 		float64 `yaml:"rate"`
+	QtShard 	int 	`yaml:"qt_shard"`
+	Capasity 	int 	`yaml:"capasity"`
+	TimeForDel	int 	`yaml:"time_for_del"`
+}
+
+type GlobalLimiterConfig struct {
+	Rate 		float64 `yaml:"rate"`
+	Capasity 	int 	`yaml:"capasity"`
 }
 
 func Init(filename string, genConfigFile bool) Config {
@@ -63,6 +77,16 @@ func setDefault() Config {
 		LogSettings: LogSettings {
 			Level: "error",
 			Directory: "logs",
+		},
+		ShLimiter: ShardLimiterConfig {
+			Rate: 10.0,
+			QtShard: 16,
+			Capasity: 100,
+			TimeForDel: 5,
+		},
+		GlLimiter: GlobalLimiterConfig {
+			Rate: 10.0,
+			Capasity: 100,
 		},
 		StoreCacheInRam: true,
 		Hosts: make([]string, 0),
