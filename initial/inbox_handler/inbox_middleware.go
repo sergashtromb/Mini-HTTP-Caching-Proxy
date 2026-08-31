@@ -25,9 +25,8 @@ func NewMiddleware(cnf *config.Config, gl *rate.Limiter, sh *rate.ShardLimiter) 
 }
 
 func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
+		
 		inboxRequest, err := createInboxReq(r)
 		if err != nil {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -36,9 +35,10 @@ func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 
 		var checkRL bool
 		intHost := slices.Contains(mi.cnf.Hosts, inboxRequest.Host)
-
+		
 		if intHost {
 			checkRL = mi.generalLimiter.Allow()
+
 		} else {
 			checkRL = mi.shardLimiter.Allow(inboxRequest.IP)
 		}

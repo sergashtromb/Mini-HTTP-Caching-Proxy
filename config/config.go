@@ -75,7 +75,7 @@ func Init(filename string, genConfigFile bool) Config {
 func setDefault() Config {	
 	return Config {
 		LogSettings: LogSettings {
-			Level: "error",
+			Level: "debug",
 			Directory: "logs",
 		},
 		ShLimiter: ShardLimiterConfig {

@@ -12,6 +12,7 @@ import (
 	"mini_http_caching_proxy/rate"
 	"net/http"
 	"os"
+	"sync"
 )
 
 func main() {
@@ -38,30 +39,33 @@ func main() {
 	globalLimiter := rate.NewLimiter(float64(cnf.GlLimiter.Capasity), cnf.GlLimiter.Rate)
 	shardLimiter :=	rate.NewShardLimiter(cnf.ShLimiter.QtShard, float64(cnf.ShLimiter.Capasity), 
 		cnf.ShLimiter.Rate, int16(cnf.ShLimiter.TimeForDel))
-		
+
 	go shardLimiter.DeleteDontUseLimiters(ctx)
 
 	Middlware := inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
-	Handler := inboxhandler.NewInboxHandler()
+	Handler := inboxhandler.NewInboxHandler(&cnf)
 
-	servMux := http.NewServeMux()
-	servMux.HandleFunc("/", Handler.HandleInboxReq)
+	mux := http.NewServeMux()	
+	mux.HandleFunc("/", Handler.HandleInboxReq)
 
-	handle := Middlware.InternalHostMiddleware(servMux)
-
+	route := Middlware.InternalHostMiddleware(mux)
+	
 	server := &http.Server{
 		Addr: ":8080",
-		Handler: handle,
+		Handler: route,
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if err := server.ListenAndServe(); err != nil {
 			slog.Error("Error in listen and serve ", "err", err)
 			return
 		}
 	}()
 
-
+	wg.Wait()
 }
 
 func defineStartSettings(args []string) *domain.StartSettings {
