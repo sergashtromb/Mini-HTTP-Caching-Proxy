@@ -26,7 +26,7 @@ func NewMiddleware(cnf *config.Config, gl *rate.Limiter, sh *rate.ShardLimiter) 
 
 func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		
+		slog.Debug("inc Request", "Host", r.Host, "Method", r.Method)
 		inboxRequest, err := createInboxReq(r)
 		if err != nil {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

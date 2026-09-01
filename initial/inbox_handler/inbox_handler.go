@@ -3,6 +3,7 @@
 package inboxhandler
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"slices"
-	"bytes"
 )
 
 type InboxHandler struct {
@@ -101,7 +101,7 @@ func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) 
 		r.Body.Close()
 	}
 
-	new_body := bytes.NewReader(old_body)
+	new_body := io.NopCloser(bytes.NewReader(old_body))
 	req, err := http.NewRequest(r.Method, url, new_body)
 	if err != nil {
 		slog.Error("Error clone request", "err", err)
@@ -118,7 +118,7 @@ func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) 
 
 	slog.Debug("req data", "Host", r.Host, "ReqHost", req.Host, "URL", url)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
 		slog.Error("Error send other http req", "err", err, "len(old_body)", len(old_body))
 		http.Error(w, "Server error", http.StatusServiceUnavailable)
