@@ -4,6 +4,7 @@ package inboxhandler
 
 import (
 	"bytes"
+	//"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -40,7 +41,7 @@ func (ih *InboxHandler) HandleInboxReq(w http.ResponseWriter, r *http.Request) {
 
 func (ih *InboxHandler) workOtherRequest(w http.ResponseWriter, r *http.Request) {
 
-	isHttps := (r.TLS != nil)
+	isHttps := (r.TLS != nil || r.Method == "CONNECT") 
 	if isHttps {
 		ih.creatTunnel(w, r)
 	} else {
@@ -51,16 +52,21 @@ func (ih *InboxHandler) workOtherRequest(w http.ResponseWriter, r *http.Request)
 
 func (ih *InboxHandler) creatTunnel(w http.ResponseWriter, r *http.Request) {
 
+	// tlsdebug := &tls.Config{
+	// 	InsecureSkipVerify: true,
+	// 	ServerName: r.Host,
+	// }
+	slog.Debug("Handler ", "host", r.Host, "method", r.Method)
 	target, err := net.Dial("tcp", r.Host)
 	if err != nil {
-		slog.Error("Error net.Dial", "err", err)
+		slog.Error("Error tls.Dial", "err", err)
 		http.Error(w, "Server error", http.StatusServiceUnavailable)
 		return
 	}
 	defer target.Close()
 
 	w.WriteHeader(http.StatusOK)
-
+	slog.Debug("tunnel OK")
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		slog.Error("Hijacker don't supported")
@@ -76,6 +82,7 @@ func (ih *InboxHandler) creatTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 	defer clientConn.Close()
 
+	slog.Debug("transfer start")
 	go transfer(target, clientConn)
 	go transfer(clientConn, target)
 
