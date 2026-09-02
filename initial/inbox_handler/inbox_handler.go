@@ -46,7 +46,6 @@ func (ih *InboxHandler) HandleInboxReq(w http.ResponseWriter, r *http.Request) {
 	} else {
 		ih.sendHttpRequest(w, r)
 	}
-
 }
 
 func (ih *InboxHandler) HandleConnection(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +98,6 @@ func (ih *InboxHandler) HandleConnection(w http.ResponseWriter, r *http.Request)
 	})
 	
 	wg.Wait()
-
 }
 
 func createTarget(host string, timeout time.Duration) (net.Conn, error) {
@@ -128,7 +126,6 @@ func transfer(desc io.WriteCloser, src io.ReadCloser, buffP *sync.Pool) {
 		return
 	}
 	buffP.Put(bf)
-
 }
 
 func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) {
