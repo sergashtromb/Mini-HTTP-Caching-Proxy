@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"os"
 	"sync"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
@@ -46,13 +48,18 @@ func main() {
 	Middlware := inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
 	Handler := inboxhandler.NewInboxHandler(&cnf)
 
-	mux := http.NewServeMux()	
-	mux.HandleFunc("/", Handler.HandleInboxReq)
+	route := chi.NewRouter()
+	route.Use(Middlware.InternalHostMiddleware)
+	route.HandleFunc("/", Handler.HandleInboxReq)
+	route.Connect("/", Handler.HandleConnection)
 
-	route := Middlware.InternalHostMiddleware(mux)
+	// mux := http.NewServeMux()	
+	// mux.HandleFunc("/", Handler.HandleInboxReq)
+
+	// route := Middlware.InternalHostMiddleware(mux)
 	
 	server := &http.Server{
-		Addr: ":8080",
+		Addr: "127.0.0.1:8080",
 		Handler: route,
 	}
 

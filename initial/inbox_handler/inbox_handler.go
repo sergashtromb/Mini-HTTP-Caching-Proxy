@@ -4,11 +4,15 @@ package inboxhandler
 
 import (
 	"bytes"
+	"sync"
+	"time"
+
 	//"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
 	"mini_http_caching_proxy/config"
+	"mini_http_caching_proxy/tools"
 	"net"
 	"net/http"
 	"slices"
@@ -17,6 +21,7 @@ import (
 type InboxHandler struct {
 	client 	http.Client
 	cnf 	*config.Config
+	buff 	sync.Pool
 }
 
 
@@ -24,57 +29,53 @@ func NewInboxHandler(cnf *config.Config) *InboxHandler {
 	return &InboxHandler{
 		client: http.Client{},
 		cnf: cnf,
+		buff: sync.Pool{
+			New: func() interface{} {
+				bf := make([]byte, cnf.MemBuff*1024)
+				return &bf
+			},
+		},
 	}
 }
 
 func (ih *InboxHandler) HandleInboxReq(w http.ResponseWriter, r *http.Request) {
-	
 	isOurHost := slices.Contains(ih.cnf.Hosts, r.Host)
 
 	if isOurHost {
 		ih.workOurHostRequest(w, r)
-	} else {
-		ih.workOtherRequest(w, r)
-	}
-
-}
-
-func (ih *InboxHandler) workOtherRequest(w http.ResponseWriter, r *http.Request) {
-
-	isHttps := (r.TLS != nil || r.Method == "CONNECT") 
-	if isHttps {
-		ih.creatTunnel(w, r)
 	} else {
 		ih.sendHttpRequest(w, r)
 	}
 
 }
 
-func (ih *InboxHandler) creatTunnel(w http.ResponseWriter, r *http.Request) {
-
-	// tlsdebug := &tls.Config{
-	// 	InsecureSkipVerify: true,
-	// 	ServerName: r.Host,
-	// }
-	slog.Debug("Handler ", "host", r.Host, "method", r.Method)
-	target, err := net.Dial("tcp", r.Host)
-	if err != nil {
-		slog.Error("Error tls.Dial", "err", err)
-		http.Error(w, "Server error", http.StatusServiceUnavailable)
-		return
-	}
-	defer target.Close()
-
-	w.WriteHeader(http.StatusOK)
-	slog.Debug("tunnel OK")
-	hj, ok := w.(http.Hijacker)
+func (ih *InboxHandler) HandleConnection(w http.ResponseWriter, r *http.Request) {
+	
+	hijack, ok := w.(http.Hijacker)
 	if !ok {
 		slog.Error("Hijacker don't supported")
 		http.Error(w, "Hijacker don't supported", http.StatusServiceUnavailable)
 		return
 	}
 
-	clientConn, _, err := hj.Hijack()
+	target, err := createTarget(r.Host, 10*time.Second)
+	if err != nil {
+		slog.Error("Failed to connection to the target resource", "err", err)
+		http.Error(w, "Server error", http.StatusServiceUnavailable)
+
+		if conn, _, err := hijack.Hijack(); err == nil {
+			err := tools.SendBadGatterway(conn)
+			if err != nil {
+				slog.Error("Failed send Bad Gatterway", "err", err)
+			}
+			conn.Close()
+		}
+
+		return
+	}
+	defer target.Close()
+
+	clientConn, _, err := hijack.Hijack()
 	if err != nil {
 		slog.Error("Error hijack", "err", err)
 		http.Error(w, "Server error", http.StatusServiceUnavailable)
@@ -82,16 +83,52 @@ func (ih *InboxHandler) creatTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 	defer clientConn.Close()
 
-	slog.Debug("transfer start")
-	go transfer(target, clientConn)
-	go transfer(clientConn, target)
+	err = tools.SendSuccesConnection(clientConn)
+	if err != nil {
+		slog.Error("Failed send success connection", "err", err)
+		return
+	}
+
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		transfer(target, clientConn, &ih.buff)
+	})
+	wg.Go(func() {
+		transfer(clientConn, target, &ih.buff)
+	})
+	
+	wg.Wait()
 
 }
 
-func transfer(desc io.WriteCloser, src io.ReadCloser) {
+func createTarget(host string, timeout time.Duration) (net.Conn, error) {
+
+	targetIPv6, err := net.DialTimeout("tcp6", host, timeout)
+	if err == nil {
+		return targetIPv6, nil
+	}
+
+	targetIPv4, err := net.DialTimeout("tcp4", host, timeout)
+	if err != nil {
+		slog.Error("Don't connect IPv4", "err", err)
+		return nil, err
+	}
+
+	return targetIPv4, nil
+}
+
+func transfer(desc io.WriteCloser, src io.ReadCloser, buffP *sync.Pool) {
 	defer desc.Close()
 	defer src.Close()
-	io.Copy(desc, src)
+
+	bf := buffP.Get().(*[]byte)
+	_, err := io.CopyBuffer(desc, src, *bf)
+	if err != nil {
+		return
+	}
+	buffP.Put(bf)
+
 }
 
 func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) {
@@ -122,8 +159,6 @@ func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) 
 	if len(old_body) > 0 {
 		req.ContentLength = int64(len(old_body))
 	} 
-
-	slog.Debug("req data", "Host", r.Host, "ReqHost", req.Host, "URL", url)
 
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {

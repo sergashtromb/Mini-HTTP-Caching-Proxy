@@ -15,6 +15,7 @@ type Config struct {
 	GlLimiter 		GlobalLimiterConfig `yaml:"global_limiter"`
 	StoreCacheInRam bool 				`yaml:"store_cache_in_ram"`
 	Hosts 			[]string 			`yaml:"hosts"`
+	MemBuff			int 				`yaml:"mem_buff"`
 }
 
 type LogSettings struct {

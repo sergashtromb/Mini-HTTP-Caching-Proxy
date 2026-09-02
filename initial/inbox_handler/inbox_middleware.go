@@ -47,7 +47,7 @@ func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "Too many request", http.StatusTooManyRequests)
 			return 
 		}
-		slog.Debug("Middleware ", "host", r.Host, "method", r.Method, "Addr.Host", r.RemoteAddr)
+		
 		next.ServeHTTP(w, r)
 
 	})

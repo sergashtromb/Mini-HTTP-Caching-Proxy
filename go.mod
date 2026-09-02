@@ -3,5 +3,6 @@ module mini_http_caching_proxy
 go 1.26.5
 
 require (
+	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 )
