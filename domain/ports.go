@@ -2,8 +2,16 @@
 
 package domain
 
+import (
+	"context"
+	"reflect"
+	"time"
+)
+
 type CacheStore interface {
-	Add(hash string, data []byte)
-	Get(hash string) ([]byte, error)
-	Delet(hash string)
+	Set(key string, data interface{}, exp time.Duration)
+	Get(key string) interface{}
+	GetType(key string) reflect.Type
+	Del(key string)
+	DelExpiration(ctx context.Context)
 }
