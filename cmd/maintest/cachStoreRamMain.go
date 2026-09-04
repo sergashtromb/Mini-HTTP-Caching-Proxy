@@ -44,7 +44,7 @@ func main() {
 
 	boolType := false
 
-	cachStore.Set("randomKeyBytesType", bytesType, 10*time.Second)
+	cachStore.Set("randomKeyBytesType", bytesType, 10* time.Second)
 	cachStore.Set("randomKeyStrType", strType, 10*time.Second)
 	cachStore.Set("randomKeyIntType", intType, 10*time.Second)
 	cachStore.Set("randomKeyBoolType", boolType, 10*time.Second)
