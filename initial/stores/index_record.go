@@ -1,6 +1,8 @@
 package stores
 
-import "time"
+import (
+	"time"
+)
 
 type IndexRecord struct {
 	Key			[]byte
@@ -35,6 +37,12 @@ func (ir *IndexRecord) IsDead() bool {
 	now := time.Now()
 	d := now.Sub(time.Unix(ir.Expiration, 0)).Seconds()
 
+	return d > 0.0
+}
+
+func (ir *IndexRecord) IsDeadFromTime(tm time.Time) bool {
+	
+	d := tm.Sub(time.Unix(ir.Expiration, 0)).Seconds()
 	return d > 0.0
 }
 

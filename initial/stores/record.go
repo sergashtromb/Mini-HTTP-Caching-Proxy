@@ -3,10 +3,10 @@ package stores
 
 type Record struct {
 	Delete	byte
-	Key 	[]byte
 	KeyLen	uint32 // 4 size
-	Object 	[]byte
+	Key 	[]byte
 	ObjLen 	uint32 // 4 size
+	Object 	[]byte
 }
 
 func NewRecord(key string, data []byte) (Record, int64) {
@@ -16,6 +16,7 @@ func NewRecord(key string, data []byte) (Record, int64) {
 	obj_len := uint32(len(data))
 
 	rec := Record {
+		Delete: 0,
 		Key: key_byte,
 		Object: data,
 		KeyLen: key_len,
@@ -24,6 +25,16 @@ func NewRecord(key string, data []byte) (Record, int64) {
 	size := rec.RecSize()
 
 	return rec, size
+}
+
+func NewRecordFromParams(key_ln, obj_ln uint32, key_bt, val_bt []byte) Record {
+	return Record {
+		Delete: 0,
+		Key: key_bt,
+		Object: val_bt,
+		KeyLen: key_ln,
+		ObjLen: obj_ln,
+	}
 }
 
 func (r *Record) RecSize() int64 {
@@ -39,5 +50,5 @@ func (r *Record) GetData() *[]byte {
 }
 
 func (r *Record) IsDel() bool {
-	return r.Delete == 0
+	return r.Delete == 1
 }

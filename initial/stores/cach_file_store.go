@@ -23,28 +23,28 @@ type FileCacheStore struct {
 }
 
 
-func NewFileCacheStore(cnf *config.Config, td, tc time.Duration, qt_sh int, tmpPath string) *FileCacheStore {
-	fl_shards := newFileShards(qt_sh)
+// func NewFileCacheStore(cnf *config.Config, td, tc time.Duration, qt_sh int, tmpPath string) *FileCacheStore {
+// 	fl_shards := newFileShards(qt_sh)
 
-	return &FileCacheStore{
-		cnf: cnf,
-		timeDel: td,
-		timeComposition: tc,
-		shards: fl_shards,
-		tmpPath: tmpPath,
-		qt_shard: qt_sh,
-	}
+// 	return &FileCacheStore{
+// 		cnf: cnf,
+// 		timeDel: td,
+// 		timeComposition: tc,
+// 		shards: fl_shards,
+// 		tmpPath: tmpPath,
+// 		qt_shard: qt_sh,
+// 	}
 
-}
+// }
 
-func newFileShards(qt_shard int) []*FileShard {
-	new_fl_shard := make([]*FileShard, qt_shard)
+// func newFileShards(qt_shard int) []*FileShard {
+// 	new_fl_shard := make([]*FileShard, qt_shard)
 
-	for i, _ := range new_fl_shard {
-		new_fl_shard[i].index = make(map[string]IndexRecord)
-	}
+// 	for i, _ := range new_fl_shard {
+// 		new_fl_shard[i].index = make(map[string]IndexRecord)
+// 	}
 
-	return new_fl_shard
-}
+// 	return new_fl_shard
+// }
 
 
