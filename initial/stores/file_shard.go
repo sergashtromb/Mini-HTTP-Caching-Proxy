@@ -37,7 +37,7 @@ func NewFileShard(tmpDir *string, maxSize int64) (*FileShard, error) {
 
 	if err := fs.newCacheFile(*tmpDir); err != nil {
 		return nil, err
-	}
+	} 
 
 	return &fs, nil
 
