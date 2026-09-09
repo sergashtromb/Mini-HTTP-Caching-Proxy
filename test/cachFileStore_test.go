@@ -20,10 +20,6 @@ func TestRecordStructFuncsFromNewRecord(t *testing.T) {
 
 	rec, size := stores.NewRecord(my_key, data)
 
-	if rec.IsDel() != false {
-		t.Errorf("Failed create record, dead record IsDel=true")
-	}
-
 	if string(rec.Key) != my_key {
 		t.Errorf("Failed create record, keys don't equals rec.Key=%s and my_key=%s", string(rec.Key), my_key)
 	}
@@ -61,7 +57,7 @@ func TestIndexRecordStructFuncsFromNewIndexRecord(t *testing.T) {
 	nowPlus10 := now.Add(10*time.Second)
 	nowMinus10 := now.Add(15*time.Second)
 
-	idx_rec, new_fl_size := stores.NewIndexRecordFromRecord(my_key, &rec, int64(file_size), nowPlus10.Unix())
+	idx_rec, new_fl_size := stores.NewIndexRecordFromRecord(&rec, int64(file_size), nowPlus10.Unix())
 
 	// file_size + rec.RecSize() 128 + 21
 	if new_fl_size != 149 {
@@ -88,7 +84,7 @@ func TestFileShardBaseFuncs(t *testing.T) {
 
 	tmp := `C:\Temp\proxy`
 
-	fs, err := stores.NewFileShard(&tmp)
+	fs, err := stores.NewFileShard(&tmp, 100000)
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
@@ -166,7 +162,7 @@ func TestFileShardConcurencyBench(t *testing.T) {
 
 	keys := []string{"key1", "key2", "key3", "key4", "key5", "key6"}
 	tmp := `C:\Temp\proxy`
-	fs, err := stores.NewFileShard(&tmp)
+	fs, err := stores.NewFileShard(&tmp, 1*stores.Mbyte)
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
@@ -205,18 +201,18 @@ func TestFileShardConcurencyBench(t *testing.T) {
 						
 						start := time.Now()
 
-						val, err := fs.Get(keyName)
+						_, err := fs.Get(keyName)
 						if err != nil {
 							fmt.Errorf("failed get err=%v key=%v", err, keyName)
 						}
 
 						all_time.Add(int64((time.Since(start).Seconds())))
 
-						if val != nil {
-							fmt.Print(string(val) + "\n")
-						} else {
-							fmt.Print("nil\n")
-						}
+						// if val != nil {
+						// 	fmt.Print(string(val) + "\n")
+						// } else {
+						// 	fmt.Print("nil\n")
+						// }
 						
 						qt_query.Add(1)
 					}
@@ -229,4 +225,34 @@ func TestFileShardConcurencyBench(t *testing.T) {
 	all_qr := qt_query.Load()
 	all_time_req := all_time.Load()
 	fmt.Printf("all query - %v\nmiddle time - %v\n", all_qr, all_time_req/int64(all_qr))
+}
+
+func TestConvertRecordToBiteSlice(t *testing.T) {
+	
+	key := "my_key"
+	value := "my_value_is_a_big_value"
+
+	rec, size := stores.NewRecord(key, []byte(value))
+
+	byteSlice := rec.ToByte()
+
+	if size != int64(len(byteSlice)) {
+		t.Errorf("failed convert record to byte slice size=%v len(byteSlice)=%v", size, int64(len(byteSlice)))
+	}
+
+}
+
+func BenchmarkConvertRecordToBiteSliceUseAppendDontDefineSize(b *testing.B) {
+	
+	key := "my_key"
+	value := "my_value_is_a_big_value"
+
+	rec, _ := stores.NewRecord(key, []byte(value))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {	
+		_ = rec.ToByte()
+	}
+
 }

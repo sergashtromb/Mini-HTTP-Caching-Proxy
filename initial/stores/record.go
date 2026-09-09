@@ -1,5 +1,10 @@
 package stores
 
+import (
+	"encoding/binary"
+	//"fmt"
+)
+
 
 type Record struct {
 	Delete	byte
@@ -49,6 +54,38 @@ func (r *Record) GetData() *[]byte {
 	return &r.Object
 }
 
-func (r *Record) IsDel() bool {
-	return r.Delete == 1
+func (r *Record) ToByte() []byte {
+
+	rec_bt_slice := make([]byte, r.RecSize())
+	binary.BigEndian.PutUint32(rec_bt_slice[1:5], r.KeyLen)
+
+	offset := 5
+	offset += copy(rec_bt_slice[offset:], r.Key)
+
+	binary.BigEndian.PutUint32(rec_bt_slice[offset:offset+4], r.ObjLen)
+	offset += 4
+
+	copy(rec_bt_slice[offset:], r.Object)
+	
+	return rec_bt_slice
+}
+
+func RecordFromBytesSlice(b []byte) Record {
+
+	rec := Record {}
+	var offset int64
+	rec.Delete = b[0]
+	rec.KeyLen = binary.BigEndian.Uint32(b[1:5])
+
+	//fmt.Printf("\n%v\n\t\t%v %v\n\n", b, b[1:5], binary.BigEndian.Uint32(b[1:5]))
+
+	offset = 5
+	rec.Key = b[offset:offset+int64(rec.KeyLen)]
+
+	offset += int64(rec.KeyLen)
+	rec.ObjLen = binary.BigEndian.Uint32(b[offset:offset+4])
+
+	rec.Object = b[offset+4:]
+
+	return rec
 }

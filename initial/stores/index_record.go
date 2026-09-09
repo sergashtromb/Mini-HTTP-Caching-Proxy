@@ -5,31 +5,26 @@ import (
 )
 
 type IndexRecord struct {
-	Key			[]byte
 	offset 		int64
 	Expiration 	int64
-	KeyLen 		uint32
+	DateLen		int64
 }
 
-func NewIndexRecord(key string, offset, expiration int64) IndexRecord {
-
-	key_byte := []byte(key)
-	key_len := uint32(len(key_byte))
-
+func NewIndexRecord(offset, expiration, dateLen int64) IndexRecord {
 	return IndexRecord{
-		Key: key_byte,
 		offset: offset,
 		Expiration: expiration,
-		KeyLen: key_len,
+		DateLen: dateLen,
 	}
 }
 
-func NewIndexRecordFromRecord(key string, data *Record, fl_size, expiration int64) (IndexRecord, int64) {
+func NewIndexRecordFromRecord(data *Record, fl_size, expiration int64) (IndexRecord, int64) {
 
-	ir := NewIndexRecord(key, fl_size, expiration)
-	size := fl_size + data.RecSize()
+	size := data.RecSize()
+	ir := NewIndexRecord(fl_size, expiration, size)
+	new_fl_size := fl_size + size
 
-	return ir, size
+	return ir, new_fl_size
 }
 
 func (ir *IndexRecord) IsDead() bool {
@@ -44,10 +39,6 @@ func (ir *IndexRecord) IsDeadFromTime(tm time.Time) bool {
 	
 	d := tm.Sub(time.Unix(ir.Expiration, 0)).Seconds()
 	return d > 0.0
-}
-
-func (ir *IndexRecord) GetKey() string {
-	return string(ir.Key)
 }
 
 func (ir *IndexRecord) GetOffset() int64 {
