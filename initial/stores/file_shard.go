@@ -19,12 +19,15 @@ const (
 )
 
 type FileShard struct {
-	rm 			sync.RWMutex
-	index		map[string]IndexRecord
-	tmpDir		*string
-	file 		*os.File
-	sizeFile	atomic.Int64
-	maxSize		int64
+	rm 				sync.RWMutex
+	index			map[string]IndexRecord
+	tmpDir			*string
+	file 			*os.File
+	newFile 		*os.File
+	isActiveComp 	atomic.Bool
+	sizeFile		atomic.Int64
+	sizeNewFile		atomic.Int64
+	maxSize			int64
 }
 
 func NewFileShard(tmpDir *string, maxSize int64) (*FileShard, error) {
@@ -39,8 +42,7 @@ func NewFileShard(tmpDir *string, maxSize int64) (*FileShard, error) {
 		return nil, err
 	} 
 
-	return &fs, nil
-
+	return &fs, nil 
 }
 
 // TODO create method for initialisation
@@ -73,14 +75,25 @@ func (fs *FileShard) Get(key string) ([]byte, error) {
 	}
 }
 
+// CHANGE: добавить замену файла на новый если идет компактизация
+
 func (fs *FileShard) Set(key string, exp int64, data []byte) error {
 
 	fs.rm.Lock()
 	defer fs.rm.Unlock()
 
+	isActiveComp := fs.isActiveComp.Load()
+
+	var sizeFile int64
+	if isActiveComp {
+		sizeFile = fs.sizeNewFile.Load()
+	} else {
+		sizeFile = fs.sizeFile.Load()
+	}
+
 	rec, size := NewRecord(key, data)
 
-	if fs.sizeFile.Load() > fs.maxSize + size {
+	if sizeFile > fs.maxSize + size {
 		return MemoryLimit("exceeding the allowed cache file size")
 	}
 	
@@ -99,11 +112,21 @@ func (fs *FileShard) Set(key string, exp int64, data []byte) error {
 		if err := fs.writeNewRecord(fs.file, *old_rec); err != nil {
 			return FailedDeleteRecordToCache(err.Error())
 		}
-		fs.sizeFile.Add(old_rec.RecSize())
+		if isActiveComp {
+			fs.sizeNewFile.Add(old_rec.RecSize())
+		} else {
+			fs.sizeFile.Add(old_rec.RecSize())
+		}
+		
 
 	}
 
-	offset := fs.sizeFile.Load()
+	var offset int64
+	if isActiveComp {
+		offset = fs.sizeNewFile.Load()
+	} else {
+		offset = fs.sizeFile.Load()
+	}
 
 	if err := fs.writeNewRecord(fs.file, rec); err != nil {
 		return FailedRecordToCache(err.Error())
