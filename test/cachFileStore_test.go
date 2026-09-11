@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"mini_http_caching_proxy/initial/stores"
@@ -190,7 +191,11 @@ func TestFileShardConcurencyBench(t *testing.T) {
 
 						err = fs.Set(keyName, time.Now().Add(20*time.Minute).Unix(), []byte(data))
 						if err != nil {
-							fmt.Errorf("failed set err=%v key=%v", err, keyName)
+							if errors.Is(err, stores.ErrMemoryLimit) {
+								fs.StartCompactization(ctx)
+							} else {
+								fmt.Errorf("failed set err=%v key=%v", err, keyName)
+							}							
 						}				
 
 						all_time.Add(time.Since(start).Microseconds())

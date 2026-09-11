@@ -1,7 +1,11 @@
 package tools
 
 import (
+	"context"
 	"hash/fnv"
+	"log/slog"
+	"runtime/debug"
+
 	"github.com/cespare/xxhash/v2"
 )
 
@@ -36,4 +40,26 @@ func ShardIDFromStringAIMethod(key string, numShards int) int {
 	}
 
 	return int(hashVal % uint32(numShards))
+}
+
+func SafeGo(rec func(), fn func(ctx context.Context) error, ctx context.Context) {
+
+	go func() {
+		defer rec()
+		if err := fn(ctx); err != nil {
+			slog.Error("Failed SafeGo", "err", err)
+		}
+		
+	}()
+	
+}
+
+func UnivSafeGo(fn func(ctx context.Context) error, ctx context.Context) {
+
+	SafeGo(func () {
+		if r := recover(); r != nil {
+			slog.Error("Panic in gorutine", "r", r, "stak", debug.Stack())
+		}	
+	}, fn, ctx)
+
 }

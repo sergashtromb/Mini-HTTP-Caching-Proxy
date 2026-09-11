@@ -58,6 +58,7 @@ func (r *Record) ToByte() []byte {
 
 	rec_bt_slice := make([]byte, r.RecSize())
 	binary.BigEndian.PutUint32(rec_bt_slice[1:5], r.KeyLen)
+	rec_bt_slice[0] = r.Delete
 
 	offset := 5
 	offset += copy(rec_bt_slice[offset:], r.Key)
@@ -76,8 +77,6 @@ func RecordFromBytesSlice(b []byte) Record {
 	var offset int64
 	rec.Delete = b[0]
 	rec.KeyLen = binary.BigEndian.Uint32(b[1:5])
-
-	//fmt.Printf("\n%v\n\t\t%v %v\n\n", b, b[1:5], binary.BigEndian.Uint32(b[1:5]))
 
 	offset = 5
 	rec.Key = b[offset:offset+int64(rec.KeyLen)]
