@@ -9,6 +9,7 @@ import (
 	"mini_http_caching_proxy/tools"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,7 @@ const (
 )
 
 type FileShard struct {
+	number			int
 	rm 				sync.RWMutex
 	index			map[string]IndexRecord
 	indexComp		map[string]IndexRecord
@@ -36,15 +38,16 @@ type FileShard struct {
 	triggerComp		chan struct{}
 }
 
-func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64) (*FileShard, error) {
+func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64, num int) (*FileShard, error) {
 
 	fs := FileShard{
+		number: num,
 		index: make(map[string]IndexRecord),
 		tmpDir: tmpDir,
 		maxSize: maxSize,
 	}
 
-	fl, size, err := newCacheFile(*tmpDir, tmpFileName)
+	fl, size, err := newCacheFile(*tmpDir, tmpFileName, num)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +61,7 @@ func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64) (*FileShard
 
 func (fs *FileShard) Init(ctx context.Context) error {
 
-	if err := fs.initIndexFromFile(); err != nil {
+	if err := fs.initIndexFromFile(ctx); err != nil {
 		return err
 	}
 
@@ -67,6 +70,12 @@ func (fs *FileShard) Init(ctx context.Context) error {
 			slog.Error("Failed gorutin for compact", "r", r)
 		}
 	}, fs.checkTrigger, ctx)
+
+	tools.SafeGo(func() {
+		if r := recover(); r != nil {
+			slog.Error("Failed gorutin for delete exp", "r", r)
+		}
+	}, fs.DeleteExp, ctx)
 
 	return nil
 }
@@ -233,7 +242,7 @@ func (fs *FileShard) Delete(key string) error {
 }
 
 // use only with flag isActiveComp=false
-func (fs *FileShard) DeleteExp() error {
+func (fs *FileShard) DeleteExp(ctx context.Context) error {
 
 	fs.rm.Lock()
 	defer fs.rm.Unlock()
@@ -244,6 +253,12 @@ func (fs *FileShard) DeleteExp() error {
 
 	now := time.Now()
 	for key, val := range fs.index {
+
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 
 		if val.IsDeadFromTime(now) {
 			rec, err := fs.getRecord(fs.file, val.GetOffset(), val.DateLen)
@@ -301,7 +316,7 @@ func (fs *FileShard) Compactization(ctx context.Context) error {
 
 	fs.rm.Lock()
 
-	cmpFile, cmpSize, err := newCacheFile(*fs.tmpDir, "")
+	cmpFile, cmpSize, err := newCacheFile(*fs.tmpDir, "", fs.number)
 	if err != nil {
 		fs.rm.Unlock()
 		slog.Error("Failed create new cache file in Compactization", "err", err)
@@ -429,14 +444,22 @@ func (fs *FileShard) getFile(isActiveComp bool) *os.File {
 	}
 }
 
-func newCacheFile(tmpPath, tmpNameFile string) (*os.File, int64, error) {
+func newCacheFile(tmpPath, tmpNameFile string, num int) (*os.File, int64, error) {
 
 	var file_name string
+	var sb strings.Builder
+
 	if tmpNameFile == "" {
 		file_name = uuid.NewString()
 	} else {
 		file_name = tmpNameFile
 	}
+
+	sb.WriteString(string(num))
+	sb.WriteString("_")
+	sb.WriteString(file_name)
+
+	file_name = sb.String()
 
 	fl, err := os.OpenFile(filepath.Join(tmpPath, file_name), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
@@ -494,7 +517,7 @@ func (fs *FileShard) getRecord(file *os.File, offset int64, size int64) (*Record
 	return &rec, nil
 }
 
-func (fs *FileShard) initIndexFromFile() error {
+func (fs *FileShard) initIndexFromFile(ctx context.Context) error {
 
 	key_len_bt 	:= make([]byte, 4)
 	obj_len_bt 	:= make([]byte, 4)
@@ -503,6 +526,12 @@ func (fs *FileShard) initIndexFromFile() error {
 	var offset int64
 
 	for {
+
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 
 		eof, err := safeReadSlice(fs.file, &del_bt, 
 			"Failed init index from file, err read key len")

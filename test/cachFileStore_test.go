@@ -85,7 +85,7 @@ func TestFileShardBaseFuncs(t *testing.T) {
 
 	tmp := `C:\Temp\proxy`
 
-	fs, err := stores.NewFileShard(&tmp, "", 100000)
+	fs, err := stores.NewFileShard(&tmp, "", 100000, 0)
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
@@ -163,7 +163,7 @@ func TestFileShardConcurencyBench(t *testing.T) {
 
 	keys := []string{"key1", "key2", "key3", "key4", "key5", "key6"}
 	tmp := `C:\Temp\proxy`
-	fs, err := stores.NewFileShard(&tmp, "", 1*stores.Kbyte)
+	fs, err := stores.NewFileShard(&tmp, "", 1*stores.Kbyte, 0)
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
@@ -286,7 +286,7 @@ func TestInitializationFileShardFromFile(t *testing.T) {
 	
 	file_name := "80cb34dc-a1a1-4453-a35a-11d97e3321fa"
 	tmp := `C:\Temp\proxy`
-	fs, err := stores.NewFileShard(&tmp, file_name, 1*stores.Mbyte)
+	fs, err := stores.NewFileShard(&tmp, file_name, 1*stores.Mbyte, 0)
 	if err != nil {
 		fmt.Errorf("failed create new file shard err:%v", "err")
 	}
@@ -303,5 +303,4 @@ func TestInitializationFileShardFromFile(t *testing.T) {
 	// for key, val := range fs.FOR_TEST____getIndex() {
 	// 	fmt.Printf("key %s rec_size %v off %v\n", key, val.DateLen, val.GetOffset())
 	// }
-
 }

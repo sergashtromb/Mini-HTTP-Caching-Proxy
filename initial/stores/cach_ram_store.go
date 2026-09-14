@@ -4,10 +4,8 @@ package stores
 
 import (
 	"context"
-	"log/slog"
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/tools"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -15,7 +13,7 @@ import (
 type RamCacheStore struct {
 	cnf 		*config.Config
 	shards 		[]ShardCache
-	qt_shards	int
+	qtShards	int
 	timeDel		time.Duration
 }
 
@@ -25,16 +23,15 @@ type ShardCache struct {
 }
 
 type Item struct {
-	Data 		interface{}
+	Data 		[]byte
 	Expiration 	int64
-	DType 		reflect.Type
 }
 
 func NewRamCacheStore(cnf *config.Config, td time.Duration, qt_shards int) *RamCacheStore {
 	return &RamCacheStore {
 		cnf: cnf,
 		shards: initShards(qt_shards),
-		qt_shards: qt_shards,
+		qtShards: qt_shards,
 		timeDel: td,
 	}
 }
@@ -49,11 +46,27 @@ func initShards(qt_shards int) []ShardCache {
 }
 
 func (rcs *RamCacheStore) getShard(key string) *ShardCache {
-	idx := tools.ShardIDFromStringxxxHash(key, rcs.qt_shards)
+	idx := tools.ShardIDFromStringxxxHash(key, rcs.qtShards)
 	return &rcs.shards[idx]
 }
 
-func (rcs *RamCacheStore) Set(key string, data interface{}, exp time.Duration) {
+func (rcs *RamCacheStore) Set(key string, data []byte) error {
+
+	shard := rcs.getShard(key)
+
+	shard.rm.Lock()
+	defer shard.rm.Unlock()
+
+	item := Item {
+		Data: data,
+		Expiration: time.Now().Add(rcs.timeDel).Unix(),
+	}
+
+	shard.dataStack[key] = item
+	return nil
+}
+
+func (rcs *RamCacheStore) SetWithExp(key string, data []byte, exp time.Duration) error {
 
 	shard := rcs.getShard(key)
 
@@ -63,14 +76,13 @@ func (rcs *RamCacheStore) Set(key string, data interface{}, exp time.Duration) {
 	item := Item {
 		Data: data,
 		Expiration: time.Now().Add(exp).Unix(),
-		DType: reflect.TypeOf(data),
 	}
 
 	shard.dataStack[key] = item
-	slog.Debug("set elem", "data", data, "idx_shard", tools.ShardIDFromStringxxxHash(key, rcs.qt_shards))
+	return nil
 }
 
-func (rcs *RamCacheStore) Get(key string) interface{} {
+func (rcs *RamCacheStore) Get(key string) ([]byte, error) {
 
 	shard := rcs.getShard(key)
 
@@ -80,25 +92,10 @@ func (rcs *RamCacheStore) Get(key string) interface{} {
 	val, ok := shard.dataStack[key]	
 
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
-	return val.Data
-}
-
-func (rcs *RamCacheStore) GetType(key string) reflect.Type {
-
-	shard := rcs.getShard(key)
-
-	shard.rm.RLock()
-	defer shard.rm.RUnlock()
-
-	val, ok := shard.dataStack[key]
-	if !ok {
-		return nil
-	}
-
-	return val.DType
+	return val.Data, nil
 }
 
 func (rcs *RamCacheStore) Del(key string) {
@@ -127,7 +124,6 @@ func (rcs *RamCacheStore) DelWithCheckExp(key string) {
 	if decs > 0 {
 		delete(shard.dataStack, key)
 	} 
-
 }
 
 func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
@@ -135,6 +131,7 @@ func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 	go func() {
 
 		ticker := time.NewTicker(rcs.timeDel)
+		defer ticker.Stop()
 
 		for {
 			select {
@@ -158,7 +155,6 @@ func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 						if decs > 0 {
 							forDel = append(forDel, key)
 						}
-
 					}
 
 					shard.rm.RUnlock()
@@ -166,13 +162,8 @@ func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 					for _, val := range forDel {
 						rcs.DelWithCheckExp(val)
 					}
-
 				}
-
 			}
 		}
-
-
 	}()
-
 }

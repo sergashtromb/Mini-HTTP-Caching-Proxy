@@ -10,33 +10,39 @@ import (
 )
 
 type Config struct {
-	LogSettings 	LogSettings 		`yaml:"log_settings"`
-	ShLimiter 		ShardLimiterConfig 	`yaml:"shard_limiter"`
-	GlLimiter 		GlobalLimiterConfig `yaml:"global_limiter"`
-	StoreCacheInRam bool 				`yaml:"store_cache_in_ram"`
-	Hosts 			[]string 			`yaml:"hosts"`
-	MemBuff			int 				`yaml:"mem_buff"`
+	LogSettings      LogSettings         `yaml:"log_settings"`
+	ShLimiter        ShardLimiterConfig  `yaml:"shard_limiter"`
+	GlLimiter        GlobalLimiterConfig `yaml:"global_limiter"`
+	ShardStoreConfig ShardStoreConfig    `yaml:"shard_store_confg"`
+	StoreCacheInRAM  bool                `yaml:"store_cache_in_ram"`
+	TmpPath          string              `yaml:"tmp_path"`
+	Hosts            []string            `yaml:"hosts"`
+	MemBuff          int                 `yaml:"mem_buff"`
 }
 
 type LogSettings struct {
-	Level 		string `yaml:"level"`
-	Directory 	string `yaml:"directory"`
+	Level     string `yaml:"level"`
+	Directory string `yaml:"directory"`
 }
 
 type ShardLimiterConfig struct {
-	Rate 		float64 `yaml:"rate"`
-	QtShard 	int 	`yaml:"qt_shard"`
-	Capasity 	int 	`yaml:"capasity"`
-	TimeForDel	int 	`yaml:"time_for_del"`
+	Rate       float64 `yaml:"rate"`
+	QtShard    int     `yaml:"qt_shard"`
+	Capasity   int     `yaml:"capasity"`
+	TimeForDel int     `yaml:"time_for_del"`
+}
+
+type ShardStoreConfig struct {
+	QtShard    int `yaml:"qt_shard"`
+	TimeForDel int `yaml:"time_for_del"`
 }
 
 type GlobalLimiterConfig struct {
-	Rate 		float64 `yaml:"rate"`
-	Capasity 	int 	`yaml:"capasity"`
+	Rate     float64 `yaml:"rate"`
+	Capasity int     `yaml:"capasity"`
 }
 
 func Init(filename string, genConfigFile bool) Config {
-
 	var cnf Config
 
 	if genConfigFile {
@@ -48,7 +54,7 @@ func Init(filename string, genConfigFile bool) Config {
 			return cnf
 		}
 
-		if err = os.WriteFile(filename, bytes, 0644); err != nil {
+		if err = os.WriteFile(filename, bytes, 0o644); err != nil {
 			fmt.Println("Error generate config file, err write: ", err)
 			return cnf
 		}
@@ -68,29 +74,31 @@ func Init(filename string, genConfigFile bool) Config {
 		}
 
 	}
-	
-	return cnf
 
+	return cnf
 }
 
-func setDefault() Config {	
-	return Config {
-		LogSettings: LogSettings {
-			Level: "debug",
+func setDefault() Config {
+	return Config{
+		LogSettings: LogSettings{
+			Level:     "debug",
 			Directory: "logs",
 		},
-		ShLimiter: ShardLimiterConfig {
-			Rate: 10.0,
-			QtShard: 16,
-			Capasity: 100,
+		ShLimiter: ShardLimiterConfig{
+			Rate:       10.0,
+			QtShard:    16,
+			Capasity:   100,
 			TimeForDel: 5,
 		},
-		GlLimiter: GlobalLimiterConfig {
-			Rate: 10.0,
+		GlLimiter: GlobalLimiterConfig{
+			Rate:     10.0,
 			Capasity: 100,
 		},
-		StoreCacheInRam: true,
-		Hosts: make([]string, 0),
+		ShardStoreConfig: ShardStoreConfig{
+			QtShard:    12,
+			TimeForDel: 20,
+		},
+		StoreCacheInRAM: true,
+		Hosts:           make([]string, 0),
 	}
-
 }

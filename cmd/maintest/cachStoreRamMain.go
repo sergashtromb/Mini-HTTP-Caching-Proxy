@@ -4,10 +4,11 @@ import (
 	//"fmt"
 	"context"
 	"fmt"
+	"time"
+
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/initial/stores"
 	"mini_http_caching_proxy/logger"
-	"time"
 )
 
 type MyStruct struct {
@@ -16,7 +17,6 @@ type MyStruct struct {
 }
 
 func main() {
-
 	cnf := config.Init("config.yaml", false)
 
 	logFile, err := logger.Init(cnf.LogSettings.Directory, cnf.LogSettings.Level)
@@ -28,35 +28,34 @@ func main() {
 
 	cachStore := stores.NewRamCacheStore(&cnf, 5*time.Second, 10)
 
- 
 	bytesType := make([]byte, 10)
 	strType := "myString"
 	intType := 150
-	ms1 := MyStruct {
+	ms1 := MyStruct{
 		pol: 52,
 		str: "My struct 1",
 	}
 
-	msForPointer := &MyStruct {
+	msForPointer := &MyStruct{
 		pol: 568,
 		str: "My Pointer struct ",
 	}
 
 	boolType := false
 
-	cachStore.Set("randomKeyBytesType", bytesType, 10* time.Second)
-	cachStore.Set("randomKeyStrType", strType, 10*time.Second)
-	cachStore.Set("randomKeyIntType", intType, 10*time.Second)
-	cachStore.Set("randomKeyBoolType", boolType, 10*time.Second)
-	cachStore.Set("randomKeyms1", ms1, 10*time.Second)
-	cachStore.Set("randomKeymsForPointer", msForPointer, 10*time.Second)
+	cachStore.Set("randomKeyBytesType", bytesType)
+	cachStore.Set("randomKeyStrType", strType)
+	cachStore.Set("randomKeyIntType", intType)
+	cachStore.Set("randomKeyBoolType", boolType)
+	cachStore.Set("randomKeyms1", ms1)
+	cachStore.Set("randomKeymsForPointer", msForPointer)
 
-	bytesTypeGetVar := cachStore.Get("randomKeyBytesType")
-	strTypeGetVar := cachStore.Get("randomKeyStrType")
-	intTypeGetVar := cachStore.Get("randomKeyIntType")
-	boolTypeGetVar := cachStore.Get("randomKeyBoolType")
-	msTypeGetVar := cachStore.Get("randomKeyms1")
-	pointerTypeGetVar := cachStore.Get("randomKeymsForPointer")
+	bytesTypeGetVar, _ := cachStore.Get("randomKeyBytesType")
+	strTypeGetVar, _ := cachStore.Get("randomKeyStrType")
+	intTypeGetVar, _ := cachStore.Get("randomKeyIntType")
+	boolTypeGetVar, _ := cachStore.Get("randomKeyBoolType")
+	msTypeGetVar, _ := cachStore.Get("randomKeyms1")
+	pointerTypeGetVar, _ := cachStore.Get("randomKeymsForPointer")
 
 	cachStore.DelExpiration(context.Background())
 
@@ -66,10 +65,10 @@ func main() {
 	fmt.Printf("bool - %v\n", boolTypeGetVar.(bool))
 	fmt.Printf("ms - %v\n", msTypeGetVar.(MyStruct))
 	fmt.Printf("pointer - %v\n", pointerTypeGetVar.(*MyStruct))
-	time.Sleep(6*time.Second)
+	time.Sleep(6 * time.Second)
 
 	bt2 := cachStore.Get("randomKeyBytesType")
 
 	fmt.Printf("byte - %v\n", bt2)
-
 }
+

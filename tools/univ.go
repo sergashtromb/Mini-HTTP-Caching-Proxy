@@ -10,19 +10,16 @@ import (
 )
 
 func ShardIDFromString(s string, qt_shards int) int {
-
 	h := fnv.New32a()
 	h.Write([]byte(s))
-	
+
 	return int(h.Sum32() % uint32(qt_shards))
 }
 
 func ShardIDFromStringxxxHash(s string, qt_shards int) int {
-
 	hash_sum := xxhash.Sum64([]byte(s))
 
 	return int(hash_sum % uint64(qt_shards))
-
 }
 
 func ShardIDFromStringAIMethod(key string, numShards int) int {
@@ -43,23 +40,18 @@ func ShardIDFromStringAIMethod(key string, numShards int) int {
 }
 
 func SafeGo(rec func(), fn func(ctx context.Context) error, ctx context.Context) {
-
 	go func() {
 		defer rec()
 		if err := fn(ctx); err != nil {
 			slog.Error("Failed SafeGo", "err", err)
 		}
-		
 	}()
-	
 }
 
 func UnivSafeGo(fn func(ctx context.Context) error, ctx context.Context) {
-
-	SafeGo(func () {
+	SafeGo(func() {
 		if r := recover(); r != nil {
 			slog.Error("Panic in gorutine", "r", r, "stak", debug.Stack())
-		}	
+		}
 	}, fn, ctx)
-
 }
