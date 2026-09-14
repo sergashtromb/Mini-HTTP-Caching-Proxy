@@ -85,7 +85,7 @@ func TestFileShardBaseFuncs(t *testing.T) {
 
 	tmp := `C:\Temp\proxy`
 
-	fs, err := stores.NewFileShard(&tmp, 100000)
+	fs, err := stores.NewFileShard(&tmp, "", 100000)
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
@@ -163,10 +163,11 @@ func TestFileShardConcurencyBench(t *testing.T) {
 
 	keys := []string{"key1", "key2", "key3", "key4", "key5", "key6"}
 	tmp := `C:\Temp\proxy`
-	fs, err := stores.NewFileShard(&tmp, 1*stores.Mbyte)
+	fs, err := stores.NewFileShard(&tmp, "", 1*stores.Kbyte)
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
+	fs.Init(ctx)
 
 	for _, k := range keys {
 		fs.Set(k, time.Now().Add(20*time.Minute).Unix(), []byte(k))
@@ -183,16 +184,17 @@ func TestFileShardConcurencyBench(t *testing.T) {
 					return
 				default:
 					isSet := rand.IntN(100) > chance_set
+					isDel := rand.IntN(92) > chance_set
 					keyName := fmt.Sprintf("key%v", rand.IntN(10))
 					data := fmt.Sprintf("data%v", rand.IntN(100))
-					if isSet {
-						
+					if isDel {
+
 						start := time.Now()
 
-						err = fs.Set(keyName, time.Now().Add(20*time.Minute).Unix(), []byte(data))
+						err = fs.Delete(keyName)
 						if err != nil {
 							if errors.Is(err, stores.ErrMemoryLimit) {
-								fs.StartCompactization(ctx)
+								fs.StartCompactization()
 							} else {
 								fmt.Errorf("failed set err=%v key=%v", err, keyName)
 							}							
@@ -203,24 +205,44 @@ func TestFileShardConcurencyBench(t *testing.T) {
 						qt_query.Add(1)
 
 					} else {
+						if isSet {
 						
-						start := time.Now()
+							start := time.Now()
 
-						_, err := fs.Get(keyName)
-						if err != nil {
-							fmt.Errorf("failed get err=%v key=%v", err, keyName)
+							err = fs.Set(keyName, time.Now().Add(20*time.Minute).Unix(), []byte(data))
+							if err != nil {
+								if errors.Is(err, stores.ErrMemoryLimit) {
+									fs.StartCompactization()
+								} else {
+									fmt.Errorf("failed set err=%v key=%v", err, keyName)
+								}							
+							}				
+
+							all_time.Add(time.Since(start).Microseconds())
+
+							qt_query.Add(1)
+
+						} else {
+							
+							start := time.Now()
+
+							_, err := fs.Get(keyName)
+							if err != nil {
+								fmt.Errorf("failed get err=%v key=%v", err, keyName)
+							}
+
+							all_time.Add(int64((time.Since(start).Seconds())))
+
+							// if val != nil {
+							// 	fmt.Print(string(val) + "\n")
+							// } else {
+							// 	fmt.Print("nil\n")
+							// }
+							
+							qt_query.Add(1)
 						}
-
-						all_time.Add(int64((time.Since(start).Seconds())))
-
-						// if val != nil {
-						// 	fmt.Print(string(val) + "\n")
-						// } else {
-						// 	fmt.Print("nil\n")
-						// }
-						
-						qt_query.Add(1)
 					}
+					
 				}
 			}
 		})
@@ -244,7 +266,6 @@ func TestConvertRecordToBiteSlice(t *testing.T) {
 	if size != int64(len(byteSlice)) {
 		t.Errorf("failed convert record to byte slice size=%v len(byteSlice)=%v", size, int64(len(byteSlice)))
 	}
-
 }
 
 func BenchmarkConvertRecordToBiteSliceUseAppendDontDefineSize(b *testing.B) {
@@ -259,5 +280,28 @@ func BenchmarkConvertRecordToBiteSliceUseAppendDontDefineSize(b *testing.B) {
 	for i := 0; i < b.N; i++ {	
 		_ = rec.ToByte()
 	}
+}
+
+func TestInitializationFileShardFromFile(t *testing.T) {
+	
+	file_name := "80cb34dc-a1a1-4453-a35a-11d97e3321fa"
+	tmp := `C:\Temp\proxy`
+	fs, err := stores.NewFileShard(&tmp, file_name, 1*stores.Mbyte)
+	if err != nil {
+		fmt.Errorf("failed create new file shard err:%v", "err")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	defer cancel() 
+
+	err = fs.Init(ctx)
+	if err != nil {
+		fmt.Errorf("failed initialization file shard err:%v", "err")
+	}
+
+	// for key, val := range fs.FOR_TEST____getIndex() {
+	// 	fmt.Printf("key %s rec_size %v off %v\n", key, val.DateLen, val.GetOffset())
+	// }
 
 }

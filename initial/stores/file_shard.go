@@ -2,13 +2,13 @@ package stores
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
 	"log/slog"
 	"maps"
 	"mini_http_caching_proxy/tools"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,9 +33,10 @@ type FileShard struct {
 	sizeFile		atomic.Int64
 	sizeFileComp	atomic.Int64
 	maxSize			int64
+	triggerComp		chan struct{}
 }
 
-func NewFileShard(tmpDir *string, maxSize int64) (*FileShard, error) {
+func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64) (*FileShard, error) {
 
 	fs := FileShard{
 		index: make(map[string]IndexRecord),
@@ -43,18 +44,32 @@ func NewFileShard(tmpDir *string, maxSize int64) (*FileShard, error) {
 		maxSize: maxSize,
 	}
 
-	fl, size, err := newCacheFile(*tmpDir)
+	fl, size, err := newCacheFile(*tmpDir, tmpFileName)
 	if err != nil {
 		return nil, err
 	}
 
 	fs.file = fl
 	fs.sizeFile.Store(size)
+	fs.triggerComp = make(chan struct{}, 1)
 
 	return &fs, nil 
 }
 
-// TODO create method for initialisation
+func (fs *FileShard) Init(ctx context.Context) error {
+
+	if err := fs.initIndexFromFile(); err != nil {
+		return err
+	}
+
+	tools.SafeGo(func() {
+		if r := recover(); r != nil {
+			slog.Error("Failed gorutin for compact", "r", r)
+		}
+	}, fs.checkTrigger, ctx)
+
+	return nil
+}
 
 func (fs *FileShard) Close() error {
 	err := fs.file.Close()
@@ -197,7 +212,7 @@ func (fs *FileShard) Delete(key string) error {
 	rec, err := fs.getRecord(file, offset, size)
 	if err != nil {
 		slog.Error("failed get ", "err", err)
-		return err
+		return nil
 	}
 
 	rec.Delete = 1
@@ -251,32 +266,29 @@ func (fs *FileShard) DeleteExp() error {
 
 	return nil
 }
-// FIX: проблема компактизация начинается несколько раз из за этого переопредяляет поля с новым файлом и он становится nil
-func (fs *FileShard) StartCompactization(ctx context.Context) {
-	fs.rm.Lock()
-	if fs.isActiveComp.Load() {
-		return
+
+// send trigger in channel
+func (fs *FileShard) StartCompactization() {
+	select {
+	case fs.triggerComp <- struct{}{}:
+	default:
 	}
-	fs.rm.Unlock()
-	slog.Error("comp start")
-	tools.SafeGo(func () {
-		if r := recover(); r != nil {
-			slog.Error("Panic in Compactization", "r", r, "stak", debug.Stack())
-		}
-	}, func(ctx context.Context) error {
-
-		if err := fs.Compactization(ctx); err != nil {
-			slog.Error("rollback start")
-			fs.rollbackCompact()
-			return err
-		}
-
-		return nil
-
-	}, ctx)
 }
 
-// TODO: create a test function
+func (fs *FileShard) checkTrigger(ctx context.Context) error {
+	for {
+		select {
+		case <- fs.triggerComp:
+			if err := fs.Compactization(ctx); err != nil {
+				slog.Error("Failed compactization", "err", err)
+				return err
+			}
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+	}
+}
 
 // Start and work only in gorutin
 func (fs *FileShard) Compactization(ctx context.Context) error {
@@ -289,7 +301,7 @@ func (fs *FileShard) Compactization(ctx context.Context) error {
 
 	fs.rm.Lock()
 
-	cmpFile, cmpSize, err := newCacheFile(*fs.tmpDir)
+	cmpFile, cmpSize, err := newCacheFile(*fs.tmpDir, "")
 	if err != nil {
 		fs.rm.Unlock()
 		slog.Error("Failed create new cache file in Compactization", "err", err)
@@ -417,9 +429,16 @@ func (fs *FileShard) getFile(isActiveComp bool) *os.File {
 	}
 }
 
-func newCacheFile(tmpPath string) (*os.File, int64, error) {
+func newCacheFile(tmpPath, tmpNameFile string) (*os.File, int64, error) {
 
-	fl, err := os.OpenFile(filepath.Join(tmpPath, uuid.NewString()), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+	var file_name string
+	if tmpNameFile == "" {
+		file_name = uuid.NewString()
+	} else {
+		file_name = tmpNameFile
+	}
+
+	fl, err := os.OpenFile(filepath.Join(tmpPath, file_name), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -475,3 +494,87 @@ func (fs *FileShard) getRecord(file *os.File, offset int64, size int64) (*Record
 	return &rec, nil
 }
 
+func (fs *FileShard) initIndexFromFile() error {
+
+	key_len_bt 	:= make([]byte, 4)
+	obj_len_bt 	:= make([]byte, 4)
+	del_bt 		:= make([]byte, 1)
+
+	var offset int64
+
+	for {
+
+		eof, err := safeReadSlice(fs.file, &del_bt, 
+			"Failed init index from file, err read key len")
+		if err != nil {
+			return err
+		} else if err == nil && eof {
+			break
+		}
+
+		eof, err = safeReadSlice(fs.file, &key_len_bt, 
+			"Failed init index from file, err read key len")
+		if err != nil {
+			return err
+		} else if err == nil && eof {
+			break
+		}
+		
+
+		key_len := binary.BigEndian.Uint32(key_len_bt)
+		key_buf := make([]byte, key_len)
+
+		eof, err = safeReadSlice(fs.file, &key_buf, 
+			"Failed init index from file, err read key ")
+		if err != nil {
+			return err
+		} else if err == nil && eof {
+			break
+		}
+
+		eof, err = safeReadSlice(fs.file, &obj_len_bt, 
+			"Failed init index from file, err read obj len")
+		if err != nil {
+			return err
+		} else if err == nil && eof {
+			break
+		}
+
+		obj_len := binary.BigEndian.Uint32(obj_len_bt)
+		obj_buf := make([]byte, obj_len)
+		eof, err = safeReadSlice(fs.file, &obj_buf, 
+			"Failed init index from file, err read obj")
+		if err != nil {
+			return err
+		} else if err == nil && eof {
+			break
+		}
+
+		rec 	:= NewRecordFromParams(key_len, obj_len, key_buf, obj_buf)
+		key_str := string(key_buf)
+
+		if del_bt[0] == 0 {
+			idx_rec := NewIndexRecord(offset, time.Now().Add(20*time.Minute).Unix(), rec.RecSize())
+			fs.index[key_str] = idx_rec
+		} else {
+			delete(fs.index, key_str)
+		}
+
+		offset += rec.RecSize()
+	}
+
+	return nil
+}
+
+func safeReadSlice(file *os.File, slice *[]byte, str_err string) (bool, error) {
+
+	_, err := file.Read(*slice)
+	if err != nil && err != io.EOF {
+		slog.Error(str_err, "err", err)
+		return false, err
+	} else if err == io.EOF {
+		return true, nil
+	}
+
+	return false, nil
+}
