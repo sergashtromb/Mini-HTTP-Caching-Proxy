@@ -14,3 +14,9 @@ type InboxRequest struct {
 	Host 	string
 	Path 	string
 }
+
+type QrResult struct {
+	Key 	string
+	Value 	[]byte
+	Err   	error
+}

@@ -9,10 +9,10 @@ import (
 	"mini_http_caching_proxy/tools"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -47,7 +47,7 @@ func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64, num int) (*
 		maxSize: maxSize,
 	}
 
-	fl, size, err := newCacheFile(*tmpDir, tmpFileName, num)
+	fl, size, err := newCacheFile(*tmpDir, tmpFileName, fs.number)
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +447,6 @@ func (fs *FileShard) getFile(isActiveComp bool) *os.File {
 func newCacheFile(tmpPath, tmpNameFile string, num int) (*os.File, int64, error) {
 
 	var file_name string
-	var sb strings.Builder
 
 	if tmpNameFile == "" {
 		file_name = uuid.NewString()
@@ -455,11 +454,7 @@ func newCacheFile(tmpPath, tmpNameFile string, num int) (*os.File, int64, error)
 		file_name = tmpNameFile
 	}
 
-	sb.WriteString(string(num))
-	sb.WriteString("_")
-	sb.WriteString(file_name)
-
-	file_name = sb.String()
+	file_name = fmt.Sprintf("%v_%s", num, file_name)
 
 	fl, err := os.OpenFile(filepath.Join(tmpPath, file_name), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {

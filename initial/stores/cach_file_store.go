@@ -32,7 +32,7 @@ func NewFileCacheStore(ctx context.Context, td time.Duration, qt_sh int, max_siz
 	if err != nil {
 		return nil, err
 	}
-
+	// TODO сделать востановление из файлов сейчас создаются новые
 	wg, errctx := errgroup.WithContext(ctx)
 	for _, fs := range fl_shards {
 
@@ -95,7 +95,6 @@ func newFileShards(tmp string, qt int, max_size int64) ([]*FileShard, error) {
 
 	fss := make([]*FileShard, qt)
 	for i := range qt {
-
 		fs, err := NewFileShard(&tmp, "", max_size, i)
 		if err != nil {
 			slog.Error("Failed init file shards", "err", err)

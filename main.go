@@ -3,12 +3,14 @@ package main
 import (
 	//"fmt"
 	"context"
+	"time"
 	//"crypto/tls"
 	"fmt"
 	"log/slog"
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/domain"
 	inboxhandler "mini_http_caching_proxy/initial/inbox_handler"
+	"mini_http_caching_proxy/initial/stores"
 	"mini_http_caching_proxy/logger"
 	"mini_http_caching_proxy/rate"
 	"net/http"
@@ -45,8 +47,24 @@ func main() {
 
 	go shardLimiter.DeleteDontUseLimiters(ctx)
 
+	var cacheStore domain.CacheStore
+	
+	if cnf.StoreCacheInRAM {
+
+		ramStore := stores.NewRamCacheStore(&cnf, 10*time.Second, 16)
+		ramStore.DelExpiration(ctx)
+		cacheStore = ramStore
+		
+	} else {
+		cacheStore, err = stores.NewFileCacheStore(ctx, 10*time.Second, 16, 256*stores.Mbyte, `C:\Temp\proxy`)
+		if err != nil {
+			slog.Error("Failed create file cache store", "err", err)
+		}
+
+	}
+
 	Middlware := inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
-	Handler := inboxhandler.NewInboxHandler(&cnf)
+	Handler := inboxhandler.NewInboxHandler(&cnf, cacheStore)
 
 	route := chi.NewRouter()
 	route.Use(Middlware.InternalHostMiddleware)
@@ -59,10 +77,10 @@ func main() {
 	// route := Middlware.InternalHostMiddleware(mux)
 	
 	server := &http.Server{
-		Addr: "127.0.0.1:8080",
+		Addr: "127.0.0.1:8888",
 		Handler: route,
 	}
-
+	slog.Info("Server start")
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

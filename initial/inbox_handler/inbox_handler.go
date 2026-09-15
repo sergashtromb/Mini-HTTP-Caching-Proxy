@@ -4,6 +4,8 @@ package inboxhandler
 
 import (
 	"bytes"
+	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,20 +14,24 @@ import (
 	"io"
 	"log/slog"
 	"mini_http_caching_proxy/config"
+	"mini_http_caching_proxy/domain"
 	"mini_http_caching_proxy/tools"
 	"net"
 	"net/http"
 	"slices"
+
+	"golang.org/x/sync/singleflight"
 )
 
 type InboxHandler struct {
-	client 	http.Client
-	cnf 	*config.Config
-	buff 	sync.Pool
+	client 		http.Client
+	cnf 		*config.Config
+	buff 		sync.Pool
+	cacheStore 	domain.CacheStore
 }
 
 
-func NewInboxHandler(cnf *config.Config) *InboxHandler {
+func NewInboxHandler(cnf *config.Config, store domain.CacheStore) *InboxHandler {
 	return &InboxHandler{
 		client: http.Client{},
 		cnf: cnf,
@@ -35,6 +41,7 @@ func NewInboxHandler(cnf *config.Config) *InboxHandler {
 				return &bf
 			},
 		},
+		cacheStore: store,
 	}
 }
 
@@ -178,4 +185,157 @@ func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) 
 
 func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Request) {
 	
+	if r.Method == http.MethodGet {
+
+		key := generateKey(r)
+
+		var gr singleflight.Group
+		v, err, _ := gr.Do(key, func() (any, error) {
+
+			var respAnsw *DataStruct
+
+			data, err := ih.cacheStore.Get(key)
+			if err != nil {
+
+				slog.Error("Failed get data from cache", "err", err)
+
+				respFromOurHost, err := ih.sendHttpRequestInOurHost(r)
+				if err != nil {
+					slog.Error("Failed get data from our host", "err", err)
+					return nil, err
+				}
+
+				respAnsw = respFromOurHost 
+				slog.Debug("tree 1 respAnsw = respFromOurHost ", "respAnsw", respAnsw)
+				return respAnsw, nil
+			}
+			
+			if data == nil {
+				slog.Debug("tree 2 data == ni ")
+				respFromOurHost, err := ih.sendHttpRequestInOurHost(r)
+				if err != nil {
+					slog.Error("Failed get data from our host", "err", err)
+					return nil, err
+				}
+				
+				sl, err := json.Marshal(respFromOurHost)
+				if err != nil {
+					slog.Error("indox_handler.go 222: Failed convert DataStruct to []byte", "err", err)
+					return nil, err
+				}
+				
+				err = ih.cacheStore.Set(key, sl)
+				if err != nil {
+					slog.Error("Failed set data in cache store", "err", err)
+				}
+
+			} else {
+				slog.Debug("tree 3 data !!! nil ", "data is nil", data == nil)
+				var dt DataStruct
+				err := json.Unmarshal(data, &dt)
+				if err != nil {
+					slog.Error("indox_handler.go 236: Failed convert []byte to DataStruct", "err", err)
+					return nil, err
+				}
+				respAnsw = &dt
+			}
+			if respAnsw == nil {
+				slog.Debug("respAnsw == nil", "data", data, "key", key)
+			}
+			return respAnsw, nil
+		})
+
+		if err != nil {
+			http.Error(w, "Server error", http.StatusServiceUnavailable)
+			return
+		}
+
+		dt := v.(*DataStruct)
+		if dt != nil {
+
+			heads, body := dt.Header, dt.Body
+
+			if err != nil {
+				http.Error(w, "Server error", http.StatusServiceUnavailable)
+				return
+			}
+
+			_, err = w.Write(body)
+			if err != nil {
+				slog.Error("Failed set body to response", "err", err)
+				http.Error(w, "Server error", http.StatusServiceUnavailable)
+				return
+			}
+
+			for key, values := range heads {
+				for _, val := range values {
+					w.Header().Add(key, val)
+				}	
+			}
+		}
+	} else {
+		ih.sendHttpRequest(w, r)
+	}
+}
+
+func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, error) {
+
+	url := fmt.Sprintf("http://%s", r.Host)
+	old_body, err := io.ReadAll(r.Body)
+	if err != nil {
+		slog.Error("Error clone body request", "err", err)
+		return nil, err
+	}
+
+	if r.Body != nil {
+		r.Body.Close()
+	}
+
+	new_body := io.NopCloser(bytes.NewReader(old_body))
+	req, err := http.NewRequest(r.Method, url, new_body)
+	if err != nil {
+		slog.Error("Error clone request", "err", err)
+		return nil, err
+	}
+
+	req.Header = r.Header.Clone()
+
+	if len(old_body) > 0 {
+		req.ContentLength = int64(len(old_body))
+	} 
+
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	if err != nil {
+		slog.Error("Error send other http req", "err", err, "len(old_body)", len(old_body))
+		return nil, err
+	}
+	
+	body := make([]byte, 0)
+
+	_, err = resp.Body.Read(body)
+	if err != nil {
+		return nil, err
+	}
+
+	ds := &DataStruct {
+		Header: resp.Header,
+		Body: body,
+	}
+
+	return ds, nil
+}
+
+func generateKey(r *http.Request) string {
+
+	var strBuilder strings.Builder
+	strBuilder.WriteString(r.Method)
+	strBuilder.WriteString(r.Host)
+	strBuilder.WriteString(r.URL.Path)
+
+	return strBuilder.String()
+}
+
+type DataStruct struct {
+	Header 	http.Header `json:"header"`
+	Body 	[]byte 		`json:"body"`
 }
