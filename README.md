@@ -1,16 +1,22 @@
 Mini HTTP Caching Proxy 
 
 
-# Задача
+To get the config file, run the proxy with the parameter. When running with the parameter, a configuration file will be generated.
 
-### Критическое
-- [x] исправить баг с возвратом результата nil в начале работы прокси
-- [x] сделать восстановление из файлов в file store(сейчас создаются новые)
-- [ ] учитывать хедер возвращаемый из сервиса с временем жизни кеша Cache-Control
+```
+proxy -g nameConfig.yaml
+```
 
-### На будущее 
-- [ ] добавить basic авторизацию
-- [ ] добавить метрики:
-	- [ ] количество запросов
-	- [ ] количество обработанных запросов
-	- [ ] нагрузка на cacheStore
+# Task
+
+### Critical
+- [x] Fix a bug with returning a nil result at the start of proxy operation
+- [x] Enable file restore from file store (new ones are currently being created)
+- [ ] Consider the header returned from the Cache-Control service with the cache lifetime
+
+### Future Work
+- [ ] Add basic authorization
+- [ ] Add metrics:
+	- [ ] Number of requests
+	- [ ] Number of processed requests
+	- [ ] CacheStore load
