@@ -36,15 +36,17 @@ type FileShard struct {
 	sizeFileComp	atomic.Int64
 	maxSize			int64
 	triggerComp		chan struct{}
+	timeForDel		time.Duration
 }
 
-func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64, num int) (*FileShard, error) {
+func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64, num int, timeForDel time.Duration) (*FileShard, error) {
 
 	fs := FileShard{
 		number: num,
 		index: make(map[string]IndexRecord),
 		tmpDir: tmpDir,
 		maxSize: maxSize,
+		timeForDel: timeForDel,
 	}
 
 	fl, size, err := newCacheFile(*tmpDir, tmpFileName, fs.number)
@@ -59,9 +61,9 @@ func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64, num int) (*
 	return &fs, nil 
 }
 
-func (fs *FileShard) Init(ctx context.Context) error {
+func (fs *FileShard)  Init(initCtx context.Context, runCtx context.Context) error {
 
-	if err := fs.initIndexFromFile(ctx); err != nil {
+	if err := fs.initIndexFromFile(initCtx); err != nil {
 		return err
 	}
 
@@ -69,13 +71,13 @@ func (fs *FileShard) Init(ctx context.Context) error {
 		if r := recover(); r != nil {
 			slog.Error("Failed gorutin for compact", "r", r)
 		}
-	}, fs.checkTrigger, ctx)
+	}, fs.checkTrigger, runCtx)
 
 	tools.SafeGo(func() {
 		if r := recover(); r != nil {
 			slog.Error("Failed gorutin for delete exp", "r", r)
 		}
-	}, fs.DeleteExp, ctx)
+	}, fs.StartDeleteExp, runCtx)
 
 	return nil
 }
@@ -241,9 +243,27 @@ func (fs *FileShard) Delete(key string) error {
 	return nil
 }
 
+func (fs *FileShard) StartDeleteExp(ctx context.Context) error {
+	
+	timer := time.NewTicker(fs.timeForDel)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <- ctx.Done():
+			return nil
+		case <- timer.C:
+			
+			if err := fs.DeleteExp(ctx); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // use only with flag isActiveComp=false
 func (fs *FileShard) DeleteExp(ctx context.Context) error {
-
+	
 	fs.rm.Lock()
 	defer fs.rm.Unlock()
 
@@ -296,11 +316,10 @@ func (fs *FileShard) checkTrigger(ctx context.Context) error {
 		case <- fs.triggerComp:
 			if err := fs.Compactization(ctx); err != nil {
 				slog.Error("Failed compactization", "err", err)
-				return err
+				fs.rollbackCompact()
 			}
 		case <-ctx.Done():
 			return nil
-		default:
 		}
 	}
 }
@@ -450,11 +469,10 @@ func newCacheFile(tmpPath, tmpNameFile string, num int) (*os.File, int64, error)
 
 	if tmpNameFile == "" {
 		file_name = uuid.NewString()
+		file_name = fmt.Sprintf("%v_%s", num, file_name)
 	} else {
 		file_name = tmpNameFile
 	}
-
-	file_name = fmt.Sprintf("%v_%s", num, file_name)
 
 	fl, err := os.OpenFile(filepath.Join(tmpPath, file_name), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {

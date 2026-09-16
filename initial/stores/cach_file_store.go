@@ -6,6 +6,9 @@ import (
 	"context"
 	"log/slog"
 	"mini_http_caching_proxy/tools"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -28,16 +31,16 @@ func NewFileCacheStore(ctx context.Context, td time.Duration, qt_sh int, max_siz
 		qtShard: qt_sh,
 	}
 
-	fl_shards, err := newFileShards(tmpPath, qt_sh, max_size)
+	fl_shards, err := newFileShards(tmpPath, qt_sh, max_size, td)
 	if err != nil {
 		return nil, err
 	}
-	// TODO сделать востановление из файлов сейчас создаются новые
+
 	wg, errctx := errgroup.WithContext(ctx)
 	for _, fs := range fl_shards {
 
 		wg.Go(func() error {
-			if err := fs.Init(errctx); err != nil {
+			if err := fs.Init(errctx, ctx); err != nil {
 				return err
 			}
 			return nil
@@ -91,11 +94,42 @@ func (fcs *FileCacheStore) SetWithExp(key string, data []byte, exp time.Duration
 	return nil
 }
 
-func newFileShards(tmp string, qt int, max_size int64) ([]*FileShard, error) {
+func newFileShards(tmp string, qt int, max_size int64, timeDorDel time.Duration) ([]*FileShard, error) {
 
+	files := make(map[int]string)
+
+	ent, err := os.ReadDir(tmp)
+	if err != nil {
+		slog.Error("Failed get cache files", "err", err)
+	}
+
+	for _, e := range ent {
+
+		if !e.IsDir() {
+
+			name := strings.Split(e.Name(), "_")
+
+			if len(name) > 1 {
+
+				num, err := strconv.Atoi(name[0])
+				if err != nil {
+					continue
+				}
+
+				files[num] = e.Name()
+			} 
+		}
+	}
+	
 	fss := make([]*FileShard, qt)
 	for i := range qt {
-		fs, err := NewFileShard(&tmp, "", max_size, i)
+
+		flName, ok := files[i]
+		if !ok {
+			flName = ""
+		} 
+
+		fs, err := NewFileShard(&tmp, flName, max_size, i, timeDorDel)
 		if err != nil {
 			slog.Error("Failed init file shards", "err", err)
 			return nil, err

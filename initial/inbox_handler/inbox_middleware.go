@@ -49,12 +49,12 @@ func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 		}
 		
 		next.ServeHTTP(w, r)
-
 	})
 }
 
 
 func createInboxReq(r *http.Request) (*domain.InboxRequest,  error) {
+
 	ip, port, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		slog.Error("Error get ip and port from req", "err", err)
@@ -65,7 +65,7 @@ func createInboxReq(r *http.Request) (*domain.InboxRequest,  error) {
 		Method: r.Method,
 		IP: ip,
 		Port: port,
-		Host: r.URL.Host,
+		Host: r.Host,
 		Path: r.URL.Path,
 	}
 

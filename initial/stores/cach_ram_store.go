@@ -90,8 +90,14 @@ func (rcs *RamCacheStore) Get(key string) ([]byte, error) {
 	defer shard.rm.RUnlock()
 
 	val, ok := shard.dataStack[key]	
-
 	if !ok {
+		return nil, nil
+	}
+
+	now := time.Now()
+	decs := now.Sub(time.Unix(val.Expiration, 0)).Seconds()
+
+	if decs > 0 {
 		return nil, nil
 	}
 
@@ -140,7 +146,7 @@ func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 			case <-ticker.C:
 
 				now := time.Now()
-				forDel := make([]string, 1000)
+				forDel := make([]string, 0, 1000)
 
 				for i := range rcs.shards {
 

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	//"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,6 +27,7 @@ type InboxHandler struct {
 	cnf 		*config.Config
 	buff 		sync.Pool
 	cacheStore 	domain.CacheStore
+	sgr 		singleflight.Group
 }
 
 
@@ -187,10 +187,8 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 	
 	if r.Method == http.MethodGet {
 
-		key := generateKey(r)
-
-		var gr singleflight.Group
-		v, err, _ := gr.Do(key, func() (any, error) {
+		key := generateKey(r)		
+		v, err, _ := ih.sgr.Do(key, func() (any, error) {
 
 			var respAnsw *DataStruct
 
@@ -206,12 +204,12 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 				}
 
 				respAnsw = respFromOurHost 
-				slog.Debug("tree 1 respAnsw = respFromOurHost ", "respAnsw", respAnsw)
+				
 				return respAnsw, nil
 			}
 			
 			if data == nil {
-				slog.Debug("tree 2 data == ni ")
+				
 				respFromOurHost, err := ih.sendHttpRequestInOurHost(r)
 				if err != nil {
 					slog.Error("Failed get data from our host", "err", err)
@@ -229,15 +227,15 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 					slog.Error("Failed set data in cache store", "err", err)
 				}
 
+				respAnsw = respFromOurHost
+
 			} else {
-				slog.Debug("tree 3 data !!! nil ", "data is nil", data == nil)
-				var dt DataStruct
-				err := json.Unmarshal(data, &dt)
+				
+				dt, err := DataStructFromSlice(data)
 				if err != nil {
-					slog.Error("indox_handler.go 236: Failed convert []byte to DataStruct", "err", err)
 					return nil, err
 				}
-				respAnsw = &dt
+				respAnsw = dt
 			}
 			if respAnsw == nil {
 				slog.Debug("respAnsw == nil", "data", data, "key", key)
@@ -255,9 +253,10 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 
 			heads, body := dt.Header, dt.Body
 
-			if err != nil {
-				http.Error(w, "Server error", http.StatusServiceUnavailable)
-				return
+			for key, values := range heads {
+				for _, val := range values {
+					w.Header().Add(key, val)
+				}	
 			}
 
 			_, err = w.Write(body)
@@ -265,12 +264,6 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 				slog.Error("Failed set body to response", "err", err)
 				http.Error(w, "Server error", http.StatusServiceUnavailable)
 				return
-			}
-
-			for key, values := range heads {
-				for _, val := range values {
-					w.Header().Add(key, val)
-				}	
 			}
 		}
 	} else {
@@ -310,9 +303,7 @@ func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, 
 		return nil, err
 	}
 	
-	body := make([]byte, 0)
-
-	_, err = resp.Body.Read(body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -338,4 +329,16 @@ func generateKey(r *http.Request) string {
 type DataStruct struct {
 	Header 	http.Header `json:"header"`
 	Body 	[]byte 		`json:"body"`
+}
+
+func DataStructFromSlice(sl []byte) (*DataStruct, error) {
+
+	var dt DataStruct
+	err := json.Unmarshal(sl, &dt)
+	if err != nil {
+		slog.Error("indox_handler.go DataStructFromSlice: Failed convert []byte to DataStruct", "err", err)
+		return nil, err
+	}
+
+	return &dt, nil
 }

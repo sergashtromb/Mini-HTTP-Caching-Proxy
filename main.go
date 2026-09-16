@@ -49,18 +49,21 @@ func main() {
 
 	var cacheStore domain.CacheStore
 	
+	timeForDel := time.Duration(int64(cnf.ShardStoreConfig.TimeForDel) * int64(time.Minute))
+	qtShard := cnf.ShardStoreConfig.QtShard
+
 	if cnf.StoreCacheInRAM {
 
-		ramStore := stores.NewRamCacheStore(&cnf, 10*time.Second, 16)
+		ramStore := stores.NewRamCacheStore(&cnf, timeForDel, qtShard)
 		ramStore.DelExpiration(ctx)
 		cacheStore = ramStore
 		
 	} else {
-		cacheStore, err = stores.NewFileCacheStore(ctx, 10*time.Second, 16, 256*stores.Mbyte, `C:\Temp\proxy`)
+		cacheStore, err = stores.NewFileCacheStore(ctx, timeForDel, qtShard, cnf.ShardStoreConfig.FileSizeStore*stores.Mbyte, 
+			cnf.TmpPath)
 		if err != nil {
 			slog.Error("Failed create file cache store", "err", err)
 		}
-
 	}
 
 	Middlware := inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
@@ -71,13 +74,10 @@ func main() {
 	route.HandleFunc("/", Handler.HandleInboxReq)
 	route.Connect("/", Handler.HandleConnection)
 
-	// mux := http.NewServeMux()	
-	// mux.HandleFunc("/", Handler.HandleInboxReq)
+	addr := fmt.Sprintf("%s:%d", cnf.Host, cnf.Port)
 
-	// route := Middlware.InternalHostMiddleware(mux)
-	
 	server := &http.Server{
-		Addr: "127.0.0.1:8888",
+		Addr: addr,
 		Handler: route,
 	}
 	slog.Info("Server start")

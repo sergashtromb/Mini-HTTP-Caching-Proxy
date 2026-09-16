@@ -10,10 +10,12 @@ import (
 )
 
 type Config struct {
+	Port 			 int 				 `yaml:"port"`
+	Host 			 string 			 `yaml:"host"`
 	LogSettings      LogSettings         `yaml:"log_settings"`
 	ShLimiter        ShardLimiterConfig  `yaml:"shard_limiter"`
 	GlLimiter        GlobalLimiterConfig `yaml:"global_limiter"`
-	ShardStoreConfig ShardStoreConfig    `yaml:"shard_store_confg"`
+	ShardStoreConfig ShardStoreConfig    `yaml:"shard_store_config"`
 	StoreCacheInRAM  bool                `yaml:"store_cache_in_ram"`
 	TmpPath          string              `yaml:"tmp_path"`
 	Hosts            []string            `yaml:"hosts"`
@@ -33,8 +35,9 @@ type ShardLimiterConfig struct {
 }
 
 type ShardStoreConfig struct {
-	QtShard    int `yaml:"qt_shard"`
-	TimeForDel int `yaml:"time_for_del"`
+	QtShard    		int 	`yaml:"qt_shard"`
+	TimeForDel 		int 	`yaml:"time_for_del"`
+	FileSizeStore 	int64 	`yaml:"file_size_store"`
 }
 
 type GlobalLimiterConfig struct {
@@ -54,7 +57,7 @@ func Init(filename string, genConfigFile bool) Config {
 			return cnf
 		}
 
-		if err = os.WriteFile(filename, bytes, 0o644); err != nil {
+		if err = os.WriteFile(filename, bytes, 0644); err != nil {
 			fmt.Println("Error generate config file, err write: ", err)
 			return cnf
 		}
@@ -80,6 +83,8 @@ func Init(filename string, genConfigFile bool) Config {
 
 func setDefault() Config {
 	return Config{
+		Port: 8888,
+		Host: "0.0.0.0",
 		LogSettings: LogSettings{
 			Level:     "debug",
 			Directory: "logs",
@@ -97,6 +102,7 @@ func setDefault() Config {
 		ShardStoreConfig: ShardStoreConfig{
 			QtShard:    12,
 			TimeForDel: 20,
+			FileSizeStore: 1,
 		},
 		StoreCacheInRAM: true,
 		Hosts:           make([]string, 0),
