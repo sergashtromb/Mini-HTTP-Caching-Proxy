@@ -62,7 +62,6 @@ func (sh *Shard) delLimiter(ip string) {
 	defer sh.rm.Unlock()
 
 	delete(sh.data, ip)
-
 }
 
 func (sl *ShardLimiter) getShardIndexFromIp(ip string) int {

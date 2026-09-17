@@ -26,6 +26,7 @@ const (
 type FileShard struct {
 	number			int
 	rm 				sync.RWMutex
+	wg 				sync.WaitGroup
 	index			map[string]IndexRecord
 	indexComp		map[string]IndexRecord
 	tmpDir			*string
@@ -67,6 +68,8 @@ func (fs *FileShard)  Init(initCtx context.Context, runCtx context.Context) erro
 		return err
 	}
 
+	fs.wg.Add(2)
+
 	tools.SafeGo(func() {
 		if r := recover(); r != nil {
 			slog.Error("Failed gorutin for compact", "r", r)
@@ -83,6 +86,9 @@ func (fs *FileShard)  Init(initCtx context.Context, runCtx context.Context) erro
 }
 
 func (fs *FileShard) Close() error {
+
+	fs.wg.Wait()
+
 	err := fs.file.Close()
 	return err
 }
@@ -245,6 +251,8 @@ func (fs *FileShard) Delete(key string) error {
 
 func (fs *FileShard) StartDeleteExp(ctx context.Context) error {
 	
+	defer fs.wg.Done()
+
 	timer := time.NewTicker(fs.timeForDel)
 	defer timer.Stop()
 
@@ -311,6 +319,9 @@ func (fs *FileShard) StartCompactization() {
 }
 
 func (fs *FileShard) checkTrigger(ctx context.Context) error {
+
+	defer fs.wg.Done()
+
 	for {
 		select {
 		case <- fs.triggerComp:
@@ -562,7 +573,6 @@ func (fs *FileShard) initIndexFromFile(ctx context.Context) error {
 			break
 		}
 		
-
 		key_len := binary.BigEndian.Uint32(key_len_bt)
 		key_buf := make([]byte, key_len)
 

@@ -15,6 +15,7 @@ type RamCacheStore struct {
 	shards 		[]ShardCache
 	qtShards	int
 	timeDel		time.Duration
+	wg 			sync.WaitGroup
 }
 
 type ShardCache struct {
@@ -134,7 +135,11 @@ func (rcs *RamCacheStore) DelWithCheckExp(key string) {
 
 func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 
+	rcs.wg.Add(1)
+
 	go func() {
+
+		defer rcs.wg.Done()
 
 		ticker := time.NewTicker(rcs.timeDel)
 		defer ticker.Stop()
@@ -172,4 +177,8 @@ func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (rcs *RamCacheStore) Close() {
+	rcs.wg.Wait()
 }

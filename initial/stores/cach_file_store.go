@@ -4,6 +4,7 @@ package stores
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"mini_http_caching_proxy/tools"
 	"os"
@@ -94,6 +95,21 @@ func (fcs *FileCacheStore) SetWithExp(key string, data []byte, exp time.Duration
 	return nil
 }
 
+func (fcs *FileCacheStore) Close() error {
+
+	var errs []error
+
+	for _, shard := range fcs.shards {
+		err := shard.Close()
+		if err != nil {
+			errs = append(errs, err)
+		}
+		
+	}
+
+	return errors.Join(errs...)
+}
+
 func newFileShards(tmp string, qt int, max_size int64, timeDorDel time.Duration) ([]*FileShard, error) {
 
 	files := make(map[int]string)
@@ -140,6 +156,8 @@ func newFileShards(tmp string, qt int, max_size int64, timeDorDel time.Duration)
 
 	return fss, nil
 }
+
+
 
 func (fcs *FileCacheStore) getShard(key string) *FileShard {
 	idx := tools.ShardIDFromStringxxxHash(key, fcs.qtShard)

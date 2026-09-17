@@ -3,7 +3,11 @@ package main
 import (
 	//"fmt"
 	"context"
+	"internal/singleflight"
+	"os/signal"
+	"syscall"
 	"time"
+
 	//"crypto/tls"
 	"fmt"
 	"log/slog"
@@ -22,7 +26,7 @@ import (
 
 func main() {
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	// set start settings
@@ -45,29 +49,42 @@ func main() {
 	shardLimiter :=	rate.NewShardLimiter(cnf.ShLimiter.QtShard, float64(cnf.ShLimiter.Capasity), 
 		cnf.ShLimiter.Rate, int16(cnf.ShLimiter.TimeForDel))
 
-	go shardLimiter.DeleteDontUseLimiters(ctx)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		shardLimiter.DeleteDontUseLimiters(ctx)
+	}() 
 
 	var cacheStore domain.CacheStore
 	
-	timeForDel := time.Duration(cnf.ShardStoreConfig.TimeForDel) * time.Minute
-	qtShard := cnf.ShardStoreConfig.QtShard
+	timeForDel 	:= time.Duration(cnf.ShardStoreConfig.TimeForDel) * time.Minute
+	qtShard 	:= cnf.ShardStoreConfig.QtShard
 
 	if cnf.StoreCacheInRAM {
 
 		ramStore := stores.NewRamCacheStore(&cnf, timeForDel, qtShard)
 		ramStore.DelExpiration(ctx)
+		defer ramStore.Close()
+
 		cacheStore = ramStore
 		
 	} else {
-		cacheStore, err = stores.NewFileCacheStore(ctx, timeForDel, qtShard, cnf.ShardStoreConfig.FileSizeStore*stores.Mbyte, 
+
+		fileCacheStore, err := stores.NewFileCacheStore(ctx, timeForDel, qtShard, cnf.ShardStoreConfig.FileSizeStore*stores.Mbyte, 
 			cnf.TmpPath)
 		if err != nil {
 			slog.Error("Failed create file cache store", "err", err)
 		}
+
+		defer fileCacheStore.Close()
+
+		cacheStore = fileCacheStore
 	}
 
-	Middlware := inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
-	Handler := inboxhandler.NewInboxHandler(&cnf, cacheStore)
+	Middlware 	:= inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
+	Handler 	:= inboxhandler.NewInboxHandler(&cnf, cacheStore)
 
 	route := chi.NewRouter()
 	route.Use(Middlware.InternalHostMiddleware)
@@ -80,18 +97,27 @@ func main() {
 		Addr: addr,
 		Handler: route,
 	}
-	slog.Info("Server start")
-	var wg sync.WaitGroup
-	wg.Add(1)
+
+	slog.Info("Server start", "addr", addr)
+	
 	go func() {
-		defer wg.Done()
 		if err := server.ListenAndServe(); err != nil {
 			slog.Error("Error in listen and serve ", "err", err)
 			return
 		}
 	}()
 
-	wg.Wait()
+	<-ctx.Done()
+	defer wg.Wait()
+
+	slog.Info("Start close")
+
+	ctxTimeout, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	defer stop()
+
+	if err := server.Shutdown(ctxTimeout); err != nil {
+		slog.Error("Failed server shutdown", "err", err)
+	}
 }
 
 func defineStartSettings(args []string) *domain.StartSettings {

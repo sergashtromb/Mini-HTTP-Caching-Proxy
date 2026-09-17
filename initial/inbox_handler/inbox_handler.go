@@ -26,7 +26,7 @@ import (
 type InboxHandler struct {
 	client 		http.Client
 	cnf 		*config.Config
-	buff 		sync.Pool
+	buff 		sync.Pool //for copy data in https connect
 	cacheStore 	domain.CacheStore
 	sgr 		singleflight.Group
 }
