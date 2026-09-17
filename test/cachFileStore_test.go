@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 
@@ -292,10 +294,19 @@ func TestInitializationFileShardFromFile(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-
+	errg, initCtx := errgroup.WithContext(ctx)
 	defer cancel() 
 
-	err = fs.Init(ctx)
+	errg.Go(func() error {
+		err := fs.Init(initCtx, ctx)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	
+	errg.Wait()
+
 	if err != nil {
 		fmt.Errorf("failed initialization file shard err:%v", "err")
 	}

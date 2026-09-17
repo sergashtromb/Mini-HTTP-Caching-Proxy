@@ -3,13 +3,36 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 )
 
+// setRandomCacheControl устанавливает случайный заголовок Cache-Control:
+// либо "no-store", либо "public, max-age=<случайное время в секундах>"
+func setRandomCacheControl(w http.ResponseWriter) {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// С вероятностью ~30% отдаём no-store, иначе — случайный max-age
+	if r.Intn(10) < 3 {
+		w.Header().Set("Cache-Control", "no-store")
+		log.Println("Cache-Control: no-store")
+		return
+	}
+
+	// Случайное время жизни: от 5 секунд до 1 часа (3600 сек)
+	maxAge := r.Intn(3600-5+1) + 5
+	cacheControl := fmt.Sprintf("public, max-age=%d", maxAge)
+	w.Header().Set("Cache-Control", cacheControl)
+	log.Printf("Cache-Control: %s", cacheControl)
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	// Логируем входящий запрос
 	log.Printf("=== Входящий запрос: %s %s от %s ===", r.Method, r.URL.Path, r.RemoteAddr)
+
+	// Устанавливаем случайный Cache-Control
+	setRandomCacheControl(w)
 
 	// Собираем все GET-параметры
 	query := r.URL.Query()
@@ -68,6 +91,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Инициализируем глобальный источник случайности
+	rand.Seed(time.Now().UnixNano())
+
 	http.HandleFunc("/", handler)
 
 	addr := ":8081"

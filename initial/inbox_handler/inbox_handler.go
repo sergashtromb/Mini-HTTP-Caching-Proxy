@@ -5,6 +5,7 @@ package inboxhandler
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -197,7 +198,7 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 
 				slog.Error("Failed get data from cache", "err", err)
 
-				respFromOurHost, err := ih.sendHttpRequestInOurHost(r)
+				respFromOurHost, _, err := ih.sendHttpRequestInOurHost(r)
 				if err != nil {
 					slog.Error("Failed get data from our host", "err", err)
 					return nil, err
@@ -210,7 +211,7 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 			
 			if data == nil {
 				
-				respFromOurHost, err := ih.sendHttpRequestInOurHost(r)
+				respFromOurHost, cacheSet, err := ih.sendHttpRequestInOurHost(r)
 				if err != nil {
 					slog.Error("Failed get data from our host", "err", err)
 					return nil, err
@@ -221,10 +222,24 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 					slog.Error("indox_handler.go 222: Failed convert DataStruct to []byte", "err", err)
 					return nil, err
 				}
-				
-				err = ih.cacheStore.Set(key, sl)
-				if err != nil {
-					slog.Error("Failed set data in cache store", "err", err)
+				slog.Debug("", "cache-control", cacheSet)
+				// support cache-control header
+				if cacheSet != nil {
+
+					if cacheSet.IsSaved {
+
+						err = ih.cacheStore.SetWithExp(key, sl, cacheSet.LifeTime)
+						if err != nil {
+							slog.Error("Failed set data in cache store", "err", err)
+						}	
+
+					}
+
+				} else {
+					err = ih.cacheStore.Set(key, sl)
+					if err != nil {
+						slog.Error("Failed set data in cache store", "err", err)
+					}
 				}
 
 				respAnsw = respFromOurHost
@@ -237,9 +252,7 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 				}
 				respAnsw = dt
 			}
-			if respAnsw == nil {
-				slog.Debug("respAnsw == nil", "data", data, "key", key)
-			}
+			
 			return respAnsw, nil
 		})
 
@@ -271,13 +284,13 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, error) {
+func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, *CacheSettings, error) {
 
 	url := fmt.Sprintf("http://%s", r.Host)
 	old_body, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Error("Error clone body request", "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	if r.Body != nil {
@@ -288,7 +301,7 @@ func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, 
 	req, err := http.NewRequest(r.Method, url, new_body)
 	if err != nil {
 		slog.Error("Error clone request", "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	req.Header = r.Header.Clone()
@@ -300,12 +313,18 @@ func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, 
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
 		slog.Error("Error send other http req", "err", err, "len(old_body)", len(old_body))
-		return nil, err
+		return nil, nil, err
 	}
 	
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	var cacheSet *CacheSettings
+	cacheControl := resp.Header.Get("Cache-Control")
+	if cacheControl != "" {
+		cacheSet = ParceCacheControl(cacheControl)
 	}
 
 	ds := &DataStruct {
@@ -313,7 +332,7 @@ func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, 
 		Body: body,
 	}
 
-	return ds, nil
+	return ds, cacheSet, nil
 }
 
 func generateKey(r *http.Request) string {
@@ -324,6 +343,54 @@ func generateKey(r *http.Request) string {
 	strBuilder.WriteString(r.URL.Path)
 
 	return strBuilder.String()
+}
+
+func ParceCacheControl(cacheString string) *CacheSettings {
+
+	arr := strings.Split(cacheString, ",")
+	for i, elem := range arr {
+		arr[i] = strings.TrimSpace(elem)
+	}
+
+	isSaved := true
+	var lifeTime int64
+
+	noStore := "no-store"
+	maxAge := "max-age"
+
+	for _, elem := range arr {
+
+		if elem == noStore {
+			isSaved = false
+		} else if strings.Contains(elem, maxAge) {
+
+			_, num, _ := strings.Cut(elem, "=")
+			num = strings.TrimSpace(num)
+
+			newNum, err := strconv.ParseInt(num, 10, 64)
+			if err != nil {
+				lifeTime = 0
+			}
+
+			lifeTime = newNum
+		}
+
+	}
+
+	return NewCacheSet(isSaved, lifeTime)
+
+}
+
+type CacheSettings struct {
+	LifeTime 	time.Duration
+	IsSaved 	bool
+}
+
+func NewCacheSet(isSaved bool, lifeTime int64) *CacheSettings {
+	return &CacheSettings{
+		LifeTime: time.Duration(lifeTime) * time.Second,
+		IsSaved: isSaved,
+	}
 }
 
 type DataStruct struct {

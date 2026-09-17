@@ -49,7 +49,7 @@ func main() {
 
 	var cacheStore domain.CacheStore
 	
-	timeForDel := time.Duration(int64(cnf.ShardStoreConfig.TimeForDel) * int64(time.Minute))
+	timeForDel := time.Duration(cnf.ShardStoreConfig.TimeForDel) * time.Minute
 	qtShard := cnf.ShardStoreConfig.QtShard
 
 	if cnf.StoreCacheInRAM {

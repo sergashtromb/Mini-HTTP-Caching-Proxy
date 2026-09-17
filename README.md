@@ -13,6 +13,7 @@ proxy -g nameConfig.yaml
 - [x] Fix a bug with returning a nil result at the start of proxy operation
 - [x] Enable file restore from file store (new ones are currently being created)
 - [ ] Consider the header returned from the Cache-Control service with the cache lifetime
+- [ ] Set up a reverse or transparent proxy mode
 
 ### Future Work
 - [ ] Add basic authorization
