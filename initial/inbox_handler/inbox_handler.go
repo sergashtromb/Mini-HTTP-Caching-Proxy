@@ -4,7 +4,9 @@ package inboxhandler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,10 +31,11 @@ type InboxHandler struct {
 	buff 		sync.Pool //for copy data in https connect
 	cacheStore 	domain.CacheStore
 	sgr 		singleflight.Group
+	connManager *ConnManager
 }
 
 
-func NewInboxHandler(cnf *config.Config, store domain.CacheStore) *InboxHandler {
+func NewInboxHandler(cnf *config.Config, store domain.CacheStore, cm *ConnManager) *InboxHandler {
 	return &InboxHandler{
 		client: http.Client{},
 		cnf: cnf,
@@ -43,6 +46,7 @@ func NewInboxHandler(cnf *config.Config, store domain.CacheStore) *InboxHandler 
 			},
 		},
 		cacheStore: store,
+		connManager: cm,
 	}
 }
 
@@ -80,60 +84,82 @@ func (ih *InboxHandler) HandleConnection(w http.ResponseWriter, r *http.Request)
 
 		return
 	}
-	defer target.Close()
 
 	clientConn, _, err := hijack.Hijack()
 	if err != nil {
 		slog.Error("Error hijack", "err", err)
 		http.Error(w, "Server error", http.StatusServiceUnavailable)
+		target.Close()
 		return
 	}
-	defer clientConn.Close()
 
 	err = tools.SendSuccesConnection(clientConn)
 	if err != nil {
 		slog.Error("Failed send success connection", "err", err)
+		target.Close()
+		clientConn.Close()
 		return
 	}
 
-	var wg sync.WaitGroup
+	ih.connManager.Register(target, clientConn)
+}
 
-	wg.Go(func() {
-		transfer(target, clientConn, &ih.buff)
-	})
-	wg.Go(func() {
-		transfer(clientConn, target, &ih.buff)
-	})
-	
-	wg.Wait()
+func (ih *InboxHandler) Shutdown(ctx context.Context) error {
+
+	if err := ih.connManager.Shutdown(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+type ResultTryTarget struct {
+	Res net.Conn
+	Err error
 }
 
 func createTarget(host string, timeout time.Duration) (net.Conn, error) {
 
-	targetIPv6, err := net.DialTimeout("tcp6", host, timeout)
-	if err == nil {
-		return targetIPv6, nil
+	targetChan := make(chan ResultTryTarget, 2)
+
+	go func() {
+		getTarget("tcp4", host, timeout, targetChan)
+	}()
+
+	go func() {
+		getTarget("tcp6", host, timeout, targetChan)
+	}()
+
+	var target net.Conn
+	var err []error
+
+	for i := 0; i < 2; i++ {
+
+		res := <- targetChan
+
+		if res.Res != nil {
+			target = res.Res
+			break
+		} else {
+			err = append(err, res.Err)
+		}
 	}
 
-	targetIPv4, err := net.DialTimeout("tcp4", host, timeout)
-	if err != nil {
-		slog.Error("Don't connect IPv4", "err", err)
-		return nil, err
+	if target == nil {
+		return nil, errors.Join(err...)
 	}
 
-	return targetIPv4, nil
+	return target, nil
 }
 
-func transfer(desc io.WriteCloser, src io.ReadCloser, buffP *sync.Pool) {
-	defer desc.Close()
-	defer src.Close()
+func getTarget(tcpV, host string, timeout time.Duration, resChan chan ResultTryTarget) {
 
-	bf := buffP.Get().(*[]byte)
-	_, err := io.CopyBuffer(desc, src, *bf)
-	if err != nil {
-		return
+	var tarRes ResultTryTarget
+	tarRes.Res, tarRes.Err = net.DialTimeout(tcpV, host, timeout)
+
+	select {
+	case resChan <- tarRes:
+	default:
 	}
-	buffP.Put(bf)
 }
 
 func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +404,6 @@ func ParceCacheControl(cacheString string) *CacheSettings {
 	}
 
 	return NewCacheSet(isSaved, lifeTime)
-
 }
 
 type CacheSettings struct {

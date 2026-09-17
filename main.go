@@ -3,7 +3,6 @@ package main
 import (
 	//"fmt"
 	"context"
-	"internal/singleflight"
 	"os/signal"
 	"syscall"
 	"time"
@@ -83,8 +82,10 @@ func main() {
 		cacheStore = fileCacheStore
 	}
 
+	connManager := inboxhandler.NewConnManager(cnf.MemBuff)
+
 	Middlware 	:= inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
-	Handler 	:= inboxhandler.NewInboxHandler(&cnf, cacheStore)
+	Handler 	:= inboxhandler.NewInboxHandler(&cnf, cacheStore, connManager)
 
 	route := chi.NewRouter()
 	route.Use(Middlware.InternalHostMiddleware)
@@ -101,23 +102,32 @@ func main() {
 	slog.Info("Server start", "addr", addr)
 	
 	go func() {
-		if err := server.ListenAndServe(); err != nil {
+		if err := server.ListenAndServe(); err != nil || err != http.ErrServerClosed {
 			slog.Error("Error in listen and serve ", "err", err)
 			return
 		}
 	}()
 
 	<-ctx.Done()
-	defer wg.Wait()
 
 	slog.Info("Start close")
 
-	ctxTimeout, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	ctxTimeout, stop := context.WithTimeout(context.Background(), 30*time.Second)
 	defer stop()
+	defer wg.Wait()
+	
+	wg.Go(func() {
+		if err := server.Shutdown(ctxTimeout); err != nil {
+			slog.Error("Failed server shutdown", "err", err)
+		}
+	})
+	
+	wg.Go(func() {
+		if err := Handler.Shutdown(ctxTimeout); err != nil {
+			slog.Error("Failed connection manager shutdown", "err", err)
+		}
+	})
 
-	if err := server.Shutdown(ctxTimeout); err != nil {
-		slog.Error("Failed server shutdown", "err", err)
-	}
 }
 
 func defineStartSettings(args []string) *domain.StartSettings {
