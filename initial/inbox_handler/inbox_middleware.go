@@ -82,8 +82,6 @@ func checkUser(user, password string) bool {
 	if user == "" || password == ""{
 		return false
 	}
-
-	slog.Debug("user checked", "user", user, "pass", password)
 	return true
 }
 

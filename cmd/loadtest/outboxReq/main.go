@@ -55,8 +55,8 @@ func buildClient(proxyURL string, timeout time.Duration, maxConns int) (*http.Cl
 	return &http.Client{Transport: transport, Timeout: timeout}, nil
 }
 
-// sendOne отправляет ровно один и тот же GET на targetURL.
-func sendOne(ctx context.Context, client *http.Client, targetURL string, stats *Stats) {
+// sendOne отправляет ровно один и тот же GET на targetURL с Basic Auth.
+func sendOne(ctx context.Context, client *http.Client, targetURL, user, pass string, stats *Stats) {
 	stats.sent.Add(1)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
@@ -64,6 +64,9 @@ func sendOne(ctx context.Context, client *http.Client, targetURL string, stats *
 		stats.failed.Add(1)
 		return
 	}
+
+	// Basic-авторизация
+	req.SetBasicAuth(user, pass)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -93,6 +96,11 @@ func main() {
 	rps := flag.Int("rps", 1000, "Целевой RPS (0 = без ограничения, максимальная скорость)")
 	timeout := flag.Duration("timeout", 10*time.Second, "Таймаут одного запроса")
 	statsEvery := flag.Duration("stats", 1*time.Second, "Период вывода статистики")
+
+	// --- Basic Auth ---
+	authUser := flag.String("user", "admin", "Логин для HTTP Basic Auth")
+	authPass := flag.String("pass", "123", "Пароль для HTTP Basic Auth")
+
 	flag.Parse()
 
 	if _, err := url.ParseRequestURI(*target); err != nil {
@@ -120,6 +128,7 @@ func main() {
 	log.Printf("Запуск:")
 	log.Printf("  цель     : %s", *target)
 	log.Printf("  прокси   : %s", *proxyURL)
+	log.Printf("  basic    : %s:***", *authUser)
 	log.Printf("  воркеров : %d", *workers)
 	if *rps > 0 {
 		log.Printf("  RPS      : %d", *rps)
@@ -164,7 +173,7 @@ func main() {
 			go func() {
 				defer wg.Done()
 				for range tasks {
-					sendOne(ctx, client, *target, stats)
+					sendOne(ctx, client, *target, *authUser, *authPass, stats)
 				}
 			}()
 		}
@@ -179,7 +188,7 @@ func main() {
 					case <-ctx.Done():
 						return
 					default:
-						sendOne(ctx, client, *target, stats)
+						sendOne(ctx, client, *target, *authUser, *authPass, stats)
 					}
 				}
 			}()

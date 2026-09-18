@@ -15,12 +15,15 @@ import (
 	inboxhandler "mini_http_caching_proxy/initial/inbox_handler"
 	"mini_http_caching_proxy/initial/stores"
 	"mini_http_caching_proxy/logger"
+	"mini_http_caching_proxy/metrics"
 	"mini_http_caching_proxy/rate"
 	"net/http"
 	"os"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -42,6 +45,9 @@ func main() {
 		return
 	}
 	defer logFile.Close()
+
+	regist := prometheus.NewRegistry()
+	metr := metrics.NewMetric(regist)
 
 	globalLimiter := rate.NewLimiter(float64(cnf.GlLimiter.Capasity), cnf.GlLimiter.Rate)
 	shardLimiter :=	rate.NewShardLimiter(cnf.ShLimiter.QtShard, float64(cnf.ShLimiter.Capasity), 
@@ -83,10 +89,12 @@ func main() {
 
 	connManager := inboxhandler.NewConnManager(cnf.MemBuff)
 
-	Middlware 	:= inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
-	Handler 	:= inboxhandler.NewInboxHandler(&cnf, cacheStore, connManager)
+	MetrMiddleware 	:= metrics.NewMiddleware(metr)
+	Middlware 		:= inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
+	Handler 		:= inboxhandler.NewInboxHandler(&cnf, cacheStore, connManager)
 
 	route := chi.NewRouter()
+	route.Use(MetrMiddleware.MetricMiddleware)
 	route.Use(Middlware.CheckAuth)
 	route.Use(Middlware.InternalHostMiddleware)
 	route.HandleFunc("/", Handler.HandleInboxReq)
@@ -104,6 +112,14 @@ func main() {
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Error in listen and serve ", "err", err)
+			return
+		}
+	}()
+
+	http.Handle("/metrics", promhttp.HandlerFor(regist, promhttp.HandlerOpts{}))
+	go func() {
+		if err := http.ListenAndServe(":2525", nil); err != nil {
+			slog.Error("Failed metrics server", "err", err)
 			return
 		}
 	}()
