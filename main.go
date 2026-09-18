@@ -28,9 +28,8 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// set start settings
 	stSettings := defineStartSettings(os.Args)
-	// load config or generate config file, default config.yaml
+	
 	cnf := config.Init(stSettings.ConfigName, stSettings.GenConfigFile)
 
 	if stSettings.GenConfigFile {
@@ -71,8 +70,8 @@ func main() {
 		
 	} else {
 
-		fileCacheStore, err := stores.NewFileCacheStore(ctx, timeForDel, qtShard, cnf.ShardStoreConfig.FileSizeStore*stores.Mbyte, 
-			cnf.TmpPath)
+		fileCacheStore, err := stores.NewFileCacheStore(ctx, timeForDel, qtShard, 
+			cnf.ShardStoreConfig.FileSizeStore*stores.Mbyte, cnf.TmpPath)
 		if err != nil {
 			slog.Error("Failed create file cache store", "err", err)
 		}
@@ -102,7 +101,7 @@ func main() {
 	slog.Info("Server start", "addr", addr)
 	
 	go func() {
-		if err := server.ListenAndServe(); err != nil || err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Error in listen and serve ", "err", err)
 			return
 		}

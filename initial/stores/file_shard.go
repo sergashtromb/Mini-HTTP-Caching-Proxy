@@ -38,6 +38,8 @@ type FileShard struct {
 	maxSize			int64
 	triggerComp		chan struct{}
 	timeForDel		time.Duration
+	stopContext		context.Context
+	stopFunc 		context.CancelFunc
 }
 
 func NewFileShard(tmpDir *string, tmpFileName string, maxSize int64, num int, timeForDel time.Duration) (*FileShard, error) {
@@ -68,6 +70,8 @@ func (fs *FileShard)  Init(initCtx context.Context, runCtx context.Context) erro
 		return err
 	}
 
+	fs.stopContext, fs.stopFunc = context.WithCancel(runCtx)
+
 	fs.wg.Add(2)
 
 	tools.SafeGo(func() {
@@ -87,6 +91,7 @@ func (fs *FileShard)  Init(initCtx context.Context, runCtx context.Context) erro
 
 func (fs *FileShard) Close() error {
 
+	fs.stopFunc()
 	fs.wg.Wait()
 
 	err := fs.file.Close()
@@ -260,6 +265,8 @@ func (fs *FileShard) StartDeleteExp(ctx context.Context) error {
 		select {
 		case <- ctx.Done():
 			return nil
+		case <- fs.stopContext.Done():
+			return nil
 		case <- timer.C:
 			
 			if err := fs.DeleteExp(ctx); err != nil {
@@ -329,6 +336,8 @@ func (fs *FileShard) checkTrigger(ctx context.Context) error {
 				slog.Error("Failed compactization", "err", err)
 				fs.rollbackCompact()
 			}
+		case <- fs.stopContext.Done():
+			return nil
 		case <-ctx.Done():
 			return nil
 		}

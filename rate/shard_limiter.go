@@ -77,43 +77,40 @@ func (sl *ShardLimiter) getShardIndexFromIp(ip string) int {
 
 func (sl *ShardLimiter) DeleteDontUseLimiters(ctx context.Context) {
 
-	go func() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for {
 
-		ticker := time.NewTicker(5 * time.Minute)
-		for {
+		select {
+		case <- ctx.Done():
+			return
+		case <- ticker.C:
 
-			select {
-			case <- ctx.Done():
-				return
-			case <- ticker.C:
+			now := time.Now()
 
-				now := time.Now()
+			for i := range sl.size {
 
-				for i := range sl.size {
+				shard := &sl.shards[i]
 
-					shard := &sl.shards[i]
+				delIp := make([]string, 0)
+				shard.rm.RLock()
 
-					delIp := make([]string, 0)
-					shard.rm.RLock()
-
-					for key, val := range shard.data {
-						diff := now.Sub(val.lastTime).Minutes()
-						if diff >= 5 {
-							delIp = append(delIp, key)
-						}
-
-					}
-
-					shard.rm.RUnlock()
-
-					for _, val := range delIp {
-						shard.delLimiter(val)
+				for key, val := range shard.data {
+					diff := now.Sub(val.lastTime).Minutes()
+					if diff >= 5 {
+						delIp = append(delIp, key)
 					}
 
 				}
 
+				shard.rm.RUnlock()
+
+				for _, val := range delIp {
+					shard.delLimiter(val)
+				}
+
 			}
+
 		}
-	}()
+	}
 
 }

@@ -52,7 +52,6 @@ func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-
 func createInboxReq(r *http.Request) (*domain.InboxRequest,  error) {
 
 	ip, port, err := net.SplitHostPort(r.RemoteAddr)

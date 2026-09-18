@@ -307,7 +307,8 @@ func (ih *InboxHandler) sendHttpRequestInOurHost(r *http.Request) (*DataStruct, 
 		slog.Error("Error send other http req", "err", err, "len(old_body)", len(old_body))
 		return nil, nil, err
 	}
-	
+	defer resp.Body.Close()
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, nil, err
