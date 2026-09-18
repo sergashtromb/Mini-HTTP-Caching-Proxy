@@ -87,6 +87,7 @@ func main() {
 	Handler 	:= inboxhandler.NewInboxHandler(&cnf, cacheStore, connManager)
 
 	route := chi.NewRouter()
+	route.Use(Middlware.CheckAuth)
 	route.Use(Middlware.InternalHostMiddleware)
 	route.HandleFunc("/", Handler.HandleInboxReq)
 	route.Connect("/", Handler.HandleConnection)

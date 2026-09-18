@@ -11,3 +11,8 @@ func SendBadGatterway(conn net.Conn) error {
 	_, err := conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 	return err
 }
+
+func SendProxyAuthenticationRequired(conn net.Conn) error {
+	_, err := conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"))
+	return err
+}

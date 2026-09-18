@@ -169,7 +169,7 @@ func TestFileShardConcurencyBench(t *testing.T) {
 	if err != nil {
 		fmt.Errorf("Failed new file shard err=%v", err)
 	}
-	fs.Init(ctx)
+	fs.Init(ctx, context.Background())
 
 	for _, k := range keys {
 		fs.Set(k, time.Now().Add(20*time.Minute).Unix(), []byte(k))
