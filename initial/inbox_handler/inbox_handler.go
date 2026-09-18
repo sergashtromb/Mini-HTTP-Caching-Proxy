@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,7 +68,7 @@ func (ih *InboxHandler) HandleConnection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	target, err := createTarget(r.Host, 10*time.Second)
+	target, err := createTarget(r.Context(), r.Host, 10*time.Second)
 	if err != nil {
 		slog.Error("Failed to connection to the target resource", "err", err)
 		http.Error(w, "Server error", http.StatusServiceUnavailable)
@@ -112,55 +111,22 @@ func (ih *InboxHandler) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-type ResultTryTarget struct {
-	Res net.Conn
-	Err error
-}
+func createTarget(ctx context.Context, host string, timeout time.Duration) (net.Conn, error) {
 
-func createTarget(host string, timeout time.Duration) (net.Conn, error) {
+	dialer := &net.Dialer{
+		FallbackDelay: 300*time.Millisecond,
+		Timeout: timeout,
+	}	
 
-	targetChan := make(chan ResultTryTarget, 2)
-
-	go func() {
-		getTarget("tcp4", host, timeout, targetChan)
-	}()
-
-	go func() {
-		getTarget("tcp6", host, timeout, targetChan)
-	}()
-
-	var target net.Conn
-	var err []error
-
-	for i := 0; i < 2; i++ {
-
-		res := <- targetChan
-
-		if res.Res != nil {
-			target = res.Res
-			break
-		} else {
-			err = append(err, res.Err)
-		}
-	}
-
-	if target == nil {
-		return nil, errors.Join(err...)
+	target, err := dialer.DialContext(ctx, "tcp", host)
+	if err != nil {
+		slog.Error("Failed connect to host", "err", err)
+		return nil, err
 	}
 
 	return target, nil
 }
 
-func getTarget(tcpV, host string, timeout time.Duration, resChan chan ResultTryTarget) {
-
-	var tarRes ResultTryTarget
-	tarRes.Res, tarRes.Err = net.DialTimeout(tcpV, host, timeout)
-
-	select {
-	case resChan <- tarRes:
-	default:
-	}
-}
 
 func (ih *InboxHandler) sendHttpRequest(w http.ResponseWriter, r *http.Request) {
 
