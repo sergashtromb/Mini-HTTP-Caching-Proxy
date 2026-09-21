@@ -4,7 +4,11 @@ package config
 
 import (
 	"fmt"
+	"log"
+	"net"
 	"os"
+	"strconv"
+	"strings"
 
 	"go.yaml.in/yaml/v4"
 )
@@ -78,7 +82,68 @@ func Init(filename string, genConfigFile bool) Config {
 
 	}
 
+	setENVParams(&cnf)
+
 	return cnf
+}
+
+func setENVParams(cnf *Config) {
+
+	port := os.Getenv("APP_PORT")
+	if port != "" {
+		int_port, err := strconv.Atoi(port)
+		if err != nil {
+			log.Fatal("Failed set port fron env")
+		}
+
+		cnf.Port = int_port
+	}
+
+	host := os.Getenv("HOST")
+	if host != "" {
+		if !IsValidIP(host) {
+			log.Fatal("Failed set host from env, don't valid ip")
+		}
+		cnf.Host = host
+	}
+
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel != "" {
+		cnf.LogSettings.Level = logLevel
+	}
+	// 1 - true 0 - false
+	cacheInRam := os.Getenv("CACHE_IN_RAM")
+	if cacheInRam != "" {
+
+		inRam := true
+
+		intCacheInRam, err := strconv.Atoi(cacheInRam)
+		if err != nil {
+			intCacheInRam = 1	
+		}
+ 
+		inRam = (intCacheInRam == 1)
+		cnf.StoreCacheInRAM = inRam
+	}
+
+	tmpPath := os.Getenv("TMP_PATH")
+	if tmpPath != "" {
+		cnf.TmpPath = tmpPath
+	}
+
+	// TODO add another params from config to env
+
+	hosts := os.Getenv("LIST_HOSTS")
+	if hosts != "" {
+		arrHosts := strings.Split(host, ",")
+		// TODO chech for arr hosts
+		cnf.Hosts = arrHosts
+	}
+
+}
+
+func IsValidIP(ipStr string) bool {
+	return net.ParseIP(ipStr) != nil
 }
 
 func setDefault() Config {
@@ -86,7 +151,7 @@ func setDefault() Config {
 		Port: 8888,
 		Host: "0.0.0.0",
 		LogSettings: LogSettings{
-			Level:     "debug",
+			Level:     "info",
 			Directory: "logs",
 		},
 		ShLimiter: ShardLimiterConfig{
@@ -106,5 +171,7 @@ func setDefault() Config {
 		},
 		StoreCacheInRAM: true,
 		Hosts:           make([]string, 0),
+		TmpPath: 		"tmp",
+		MemBuff: 		1024,
 	}
 }
