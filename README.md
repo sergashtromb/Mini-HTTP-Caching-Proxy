@@ -7,15 +7,15 @@ To get the config file, run the proxy with the parameter. When running with the 
 proxy -g nameConfig.yaml
 ```
 
-# EVN params
+# ENV params
 
 ```
 APP_PORT - port for app, default 8888
 HOST - host your app, default "0.0.0.0" 
 LOG_LEVEL - level for debuging (error, debug, info, warn), default info
-CACHE_IN_RAM - determines whether the cache will be in RAM or on disk 1 - true, 0 - false
+CACHE_IN_RAM - determines whether the cache will be in RAM or on disk 1 - true, 0 - false, default true
 TMP_PATH - path for tmp files cache
-LIST_HOSTS - for reversed proxy
+LIST_HOSTS - for reversed proxy, example.com,example2.com,...
 ```
 
 # Task
