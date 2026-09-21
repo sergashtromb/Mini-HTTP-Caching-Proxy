@@ -18,6 +18,6 @@ proxy -g nameConfig.yaml
 ### Future Work
 - [x] Add basic authorization
 - [x] Add metrics:
-	- [ ] Number of requests
-	- [ ] Number of processed requests
+	- [x] Number of requests
+	- [x] Number of processed requests
 	- [ ] CacheStore load
