@@ -214,7 +214,7 @@ func (ih *InboxHandler) workOurHostRequest(w http.ResponseWriter, r *http.Reques
 					slog.Error("indox_handler.go 222: Failed convert DataStruct to []byte", "err", err)
 					return nil, err
 				}
-				slog.Debug("", "cache-control", cacheSet)
+				
 				// support cache-control header
 				if cacheSet != nil {
 

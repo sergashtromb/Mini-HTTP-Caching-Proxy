@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -65,10 +66,14 @@ func (mi *Middleware) MetricMiddleware(next http.Handler) http.Handler {
 
 		mi.metric.httpReqCurrent.Inc()
 		defer mi.metric.httpReqCurrent.Dec()
-
+		
 		record := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
+		start := time.Now()
+	
 		next.ServeHTTP(record, r)
+
+		mi.metric.httpReqTimeDeal.Observe(time.Since(start).Seconds())
 
 		labels := prometheus.Labels{
 			"method": r.Method,
