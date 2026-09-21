@@ -105,23 +105,12 @@ func stringToLevel(level string) slog.Level {
 
 }
 
-func Init(path, lvlstring string) (*os.File, error) {
-
-	err := os.Mkdir(path, 0755)
-	if err != nil {}
-
-	file, err := os.OpenFile(filepath.Join(path, "proxy.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		fmt.Println("Error create log file err:", err)
-		return  nil, err
-	}
+func Init(path, lvlstring string) {
 
 	level := stringToLevel(lvlstring)
-	out := io.MultiWriter(os.Stdout, file)
 
-	logHandler := New(out, level)
+	logHandler := New(os.Stdout, level)
 	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 
-	return file, nil
 }

@@ -39,12 +39,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	logFile, err := logger.Init(cnf.LogSettings.Directory, cnf.LogSettings.Level)
-	if err != nil {
-		fmt.Println("Error load logger err:", err)
-		return
-	}
-	defer logFile.Close()
+	logger.Init(cnf.LogSettings.Directory, cnf.LogSettings.Level)
 
 	regist := prometheus.NewRegistry()
 	metr := metrics.NewMetric(regist)
