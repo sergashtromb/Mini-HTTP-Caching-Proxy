@@ -72,12 +72,12 @@ func Init(filename string, genConfigFile bool) Config {
 		file, err := os.ReadFile(filename)
 		if err != nil {
 			fmt.Println("Error load config file err: ", err)
-			return setDefault()
+			cnf = setDefault()
 		}
 
 		if err = yaml.Unmarshal(file, &cnf); err != nil {
 			fmt.Println("Error unmarshal config file err: ", err)
-			return setDefault()
+			cnf = setDefault()
 		}
 
 	}
