@@ -18,6 +18,8 @@ WORKDIR /app
 
 COPY --from=builder /out/proxy /app
 
+RUN adduser -D -u 1000 appuser
+
 RUN mkdir -p /app/tmp && chown -R appuser:appuser /app
 
 ENV port=8080 \
