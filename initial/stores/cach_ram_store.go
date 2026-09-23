@@ -179,6 +179,7 @@ func (rcs *RamCacheStore) DelExpiration(ctx context.Context) {
 	}()
 }
 
-func (rcs *RamCacheStore) Close() {
+func (rcs *RamCacheStore) Close() error {
 	rcs.wg.Wait()
+	return nil
 }

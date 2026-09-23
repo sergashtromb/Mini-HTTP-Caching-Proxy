@@ -13,7 +13,6 @@ import (
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/domain"
 	inboxhandler "mini_http_caching_proxy/initial/inbox_handler"
-	"mini_http_caching_proxy/initial/stores"
 	"mini_http_caching_proxy/logger"
 	"mini_http_caching_proxy/metrics"
 	"mini_http_caching_proxy/rate"
@@ -56,43 +55,30 @@ func main() {
 		shardLimiter.DeleteDontUseLimiters(ctx)
 	}() 
 
-	var cacheStore domain.CacheStore
-	
-	timeForDel 	:= time.Duration(cnf.ShardStoreConfig.TimeForDel) * time.Minute
-	qtShard 	:= cnf.ShardStoreConfig.QtShard
-
-	if cnf.StoreCacheInRAM {
-
-		ramStore := stores.NewRamCacheStore(&cnf, timeForDel, qtShard)
-		ramStore.DelExpiration(ctx)
-		defer ramStore.Close()
-
-		cacheStore = ramStore
-		
-	} else {
-
-		fileCacheStore, err := stores.NewFileCacheStore(ctx, timeForDel, qtShard, 
-			cnf.ShardStoreConfig.FileSizeStore*stores.Mbyte, cnf.TmpPath)
-		if err != nil {
-			slog.Error("Failed create file cache store", "err", err)
-		}
-
-		defer fileCacheStore.Close()
-
-		cacheStore = fileCacheStore
-	}
-
-	connManager := inboxhandler.NewConnManager(cnf.MemBuff)
 
 	MetrMiddleware 	:= metrics.NewMiddleware(metr)
 	Middlware 		:= inboxhandler.NewMiddleware(&cnf, globalLimiter, shardLimiter)
-	Handler 		:= inboxhandler.NewInboxHandler(&cnf, cacheStore, connManager)
 
 	route := chi.NewRouter()
 	route.Use(MetrMiddleware.MetricMiddleware)
 	route.Use(Middlware.InternalHostMiddleware)
-	route.HandleFunc("/", Handler.HandleInboxReq)
-	route.Connect("/", Handler.HandleConnection)
+
+	var Handler inboxhandler.Handler
+	if cnf.Mode == config.ModeTranspanent {
+
+		connManager := inboxhandler.NewConnManager(cnf.MemBuff)
+		trsProxy := inboxhandler.NewTranspanentProxy(cnf.MemBuff, connManager)
+
+		route.Connect("/", trsProxy.HandleConnection)
+
+		Handler = trsProxy
+
+	} else {
+		cacheStore := domain.GetCacheStoreFromConfig(&cnf, ctx)
+		Handler = inboxhandler.NewReveresProxy(cacheStore)
+	}
+
+	route.HandleFunc("/", Handler.InboxRequest)
 
 	addr := fmt.Sprintf("%s:%d", cnf.Host, cnf.Port)
 

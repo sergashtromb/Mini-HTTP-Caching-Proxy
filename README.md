@@ -10,10 +10,11 @@ proxy -g nameConfig.yaml
 # ENV params
 
 ```
+MODE - proxy launch mode, (revers, transpanent) default revers 
 APP_PORT - port for app, default 8888
 HOST - host your app, default "0.0.0.0" 
 LOG_LEVEL - level for debuging (error, debug, info, warn), default info
-CACHE_IN_RAM - determines whether the cache will be in RAM or on disk 1 - true, 0 - false, default true
+CACHE_IN_RAM - determines whether the cache will be in RAM or on disk 1 - true, 0 - false, default 1 (true)
 TMP_PATH - path for tmp files cache
 LIST_HOSTS - for reversed proxy, example.com,example2.com,...
 ```

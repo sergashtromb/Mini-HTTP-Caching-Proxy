@@ -13,6 +13,11 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
+const (
+	ModeRevers = "revers"
+	ModeTranspanent = "transpanent"
+)
+
 type Config struct {
 	Port 			 int 				 `yaml:"port"`
 	Host 			 string 			 `yaml:"host"`
@@ -24,6 +29,7 @@ type Config struct {
 	TmpPath          string              `yaml:"tmp_path"`
 	Hosts            []string            `yaml:"hosts"`
 	MemBuff          int                 `yaml:"mem_buff"`
+	Mode 			 string 			 `yaml:"mode"`
 }
 
 type LogSettings struct {
@@ -88,6 +94,14 @@ func Init(filename string, genConfigFile bool) Config {
 }
 
 func setENVParams(cnf *Config) {
+
+	mode := os.Getenv("MODE")
+	mode = strings.TrimSpace(mode)
+	if mode != ModeRevers && mode != ModeTranspanent {
+		cnf.Mode = ModeRevers
+	} else {
+		cnf.Mode = mode
+	}
 
 	port := os.Getenv("APP_PORT")
 	if port != "" {
@@ -171,7 +185,8 @@ func setDefault() Config {
 		},
 		StoreCacheInRAM: true,
 		Hosts:           make([]string, 0),
-		TmpPath: 		"tmp",
-		MemBuff: 		1024,
+		TmpPath: 		 "tmp",
+		MemBuff: 		 1024,
+		Mode: 			 ModeRevers,	
 	}
 }
