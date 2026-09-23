@@ -64,14 +64,10 @@ func main() {
 	route.Use(Middlware.InternalHostMiddleware)
 
 	var Handler inboxhandler.Handler
+	
 	if cnf.Mode == config.ModeTranspanent {
-
 		connManager := inboxhandler.NewConnManager(cnf.MemBuff)
-		trsProxy := inboxhandler.NewTranspanentProxy(cnf.MemBuff, connManager)
-
-		route.Connect("/", trsProxy.HandleConnection)
-
-		Handler = trsProxy
+		Handler = inboxhandler.NewTranspanentProxy(cnf.MemBuff, connManager)
 
 	} else {
 		cacheStore := domain.GetCacheStoreFromConfig(&cnf, ctx)

@@ -32,7 +32,12 @@ func NewTranspanentProxy(memBuff int, cm *ConnManager) *TranspanentProxy {
 }
 
 func (ih *TranspanentProxy) InboxRequest(w http.ResponseWriter, r *http.Request) {
-	sendHttpRequest(w, r)
+
+	if r.Method == http.MethodConnect{
+		ih.HandleConnection(w, r)
+	} else {
+		sendHttpRequest(w, r)
+	}	
 }
 
 func (ih *TranspanentProxy) HandleConnection(w http.ResponseWriter, r *http.Request) {

@@ -97,11 +97,9 @@ func setENVParams(cnf *Config) {
 
 	mode := os.Getenv("MODE")
 	mode = strings.TrimSpace(mode)
-	if mode != ModeRevers && mode != ModeTranspanent {
-		cnf.Mode = ModeRevers
-	} else {
+	if mode == ModeRevers || mode == ModeTranspanent {
 		cnf.Mode = mode
-	}
+	} 
 
 	port := os.Getenv("APP_PORT")
 	if port != "" {
