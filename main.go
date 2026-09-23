@@ -90,7 +90,6 @@ func main() {
 
 	route := chi.NewRouter()
 	route.Use(MetrMiddleware.MetricMiddleware)
-	route.Use(Middlware.CheckAuth)
 	route.Use(Middlware.InternalHostMiddleware)
 	route.HandleFunc("/", Handler.HandleInboxReq)
 	route.Connect("/", Handler.HandleConnection)

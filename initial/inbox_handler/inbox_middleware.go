@@ -1,7 +1,6 @@
 package inboxhandler
 
 import (
-	"encoding/base64"
 	"log/slog"
 	"mini_http_caching_proxy/config"
 	"mini_http_caching_proxy/domain"
@@ -9,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"slices"
-	"strings"
 )
 
 type Middleware struct {
@@ -52,63 +50,6 @@ func (mi *Middleware) InternalHostMiddleware(next http.Handler) http.Handler {
 		
 		next.ServeHTTP(w, r)
 	})
-}
-
-func (mi *Middleware) CheckAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		login, pass, ok := "", "", false
-
-		if r.Method == http.MethodConnect {
-			login, pass, ok = ParseProxyAuthentication(r.Header)
-		} else {
-			login, pass, ok = r.BasicAuth()
-		}
-
-		if !checkUser(login, pass) || !ok {
-			w.Header().Set("Proxy-Authenticate", `Basic realm="mini-proxy"`)
-			w.Header().Set("Content-Length", "0")
-			w.WriteHeader(http.StatusProxyAuthRequired)
-			return 
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-// A stub to simulate the operation of a database check
-func checkUser(user, password string) bool {
-	
-	if user == "" || password == ""{
-		return false
-	}
-	return true
-}
-
-func ParseProxyAuthentication(headers http.Header) (string, string, bool) {
-
-	auth := headers.Get("Proxy-Authorization")
-	if auth == "" {
-		return "", "", false
-	}
-
-	const prefix = "Basic "
-	if !strings.HasPrefix(auth, prefix) {
-		return "", "", false
-	}
-
-	code := auth[len(prefix):]
-	decodBt, err := base64.StdEncoding.DecodeString(code)
-	if err != nil {
-		return "", "", false
-	}
-
-	login, pass, ok := strings.Cut(string(decodBt), ":")
-	if !ok {
-		return "", "", false
-	}
-
-	return strings.TrimSpace(login), strings.TrimSpace(pass), true
 }
 
 func createInboxReq(r *http.Request) (*domain.InboxRequest,  error) {
