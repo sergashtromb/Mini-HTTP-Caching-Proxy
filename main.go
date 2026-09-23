@@ -64,7 +64,7 @@ func main() {
 	route.Use(Middlware.InternalHostMiddleware)
 
 	var Handler inboxhandler.Handler
-	
+
 	if cnf.Mode == config.ModeTranspanent {
 		connManager := inboxhandler.NewConnManager(cnf.MemBuff)
 		Handler = inboxhandler.NewTranspanentProxy(cnf.MemBuff, connManager)
@@ -75,6 +75,10 @@ func main() {
 	}
 
 	route.HandleFunc("/", Handler.InboxRequest)
+	route.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	    w.WriteHeader(http.StatusOK)
+	    w.Write([]byte("ok"))
+	})
 
 	addr := fmt.Sprintf("%s:%d", cnf.Host, cnf.Port)
 
